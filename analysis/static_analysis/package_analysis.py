@@ -5,8 +5,38 @@ from typing import Dict, Iterable, List, Optional, Tuple
 
 import utils.logging_utils.logging_engine as log
 from utils.adb_utils.adb_runner import run_adb_command
-from analysis.static_analysis.app_categories import get_category
-from analysis.static_analysis.permission_watchlist import SENSITIVE_PERMISSIONS
+
+# Prefer modular imports, but gracefully fallback if unavailable
+try:
+    from analysis.static_analysis.app_categories import get_category
+    from analysis.static_analysis.permission_watchlist import SENSITIVE_PERMISSIONS
+except ImportError:
+    from . import string_finder
+
+    # Hardcoded mappings (fallback if static modules missing)
+    KNOWN_APPS = {
+        "com.facebook.katana": "Social Media",
+        "com.instagram.android": "Social Media",
+        "com.snapchat.android": "Social Media",
+        "com.twitter.android": "Social Media",
+        "com.tiktok.android": "Social Media",
+        "com.whatsapp": "Messaging",
+        "com.facebook.orca": "Messaging",
+        "org.telegram.messenger": "Messaging",
+        "com.bankofamerica.mobilebanking": "Financial",
+        "com.chase.sig.android": "Financial",
+    }
+
+    SENSITIVE_PERMISSIONS = {
+        "android.permission.RECORD_AUDIO",
+        "android.permission.READ_SMS",
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.SYSTEM_ALERT_WINDOW",
+    }
+
+    def get_category(pkg: str) -> str:
+        """Fallback category resolver using KNOWN_APPS map."""
+        return KNOWN_APPS.get(pkg, "Other")
 
 
 @dataclass
@@ -19,17 +49,11 @@ class PackageReport:
     dangerous_permissions: List[str]
     risk_score: int
     apk_hash: Optional[str] = None
+    artifacts: Optional[List[str]] = None
 
 
 def get_all_package_permissions(serial: str) -> Dict[str, List[str]]:
-    """Return a mapping of package names to permission lists.
-
-    A single ``adb shell dumpsys package`` invocation is used to gather
-    information for all packages rather than invoking ``dumpsys`` for each
-    package individually. This dramatically reduces analysis time on devices
-    with many installed applications.
-    """
-
+    """Return a mapping of package names to permission lists."""
     log.debug(f"Fetching full package dump for {serial}")
     result = run_adb_command(serial, ["shell", "dumpsys", "package"])
 
@@ -69,7 +93,6 @@ def get_all_package_permissions(serial: str) -> Dict[str, List[str]]:
 
 def get_installed_apk_paths(serial: str) -> Dict[str, str]:
     """Return a mapping of package names to APK paths on the device."""
-
     log.debug(f"Listing APK paths for {serial}")
     result = run_adb_command(serial, ["shell", "pm", "list", "packages", "-f"])
 
@@ -103,12 +126,7 @@ def verify_package_apks(
     apk_paths: Dict[str, str],
     progress_every: int = 25,
 ) -> Tuple[Dict[str, str], List[str]]:
-    """Validate that each package resolves to an APK path.
-
-    Returns a mapping of packages with valid APKs to their paths and a list of
-    packages that could not be resolved.
-    """
-
+    """Validate that each package resolves to an APK path."""
     packages = list(packages)
     total = len(packages)
     log.info(f"Validating APK paths for {total} packages")
@@ -134,7 +152,6 @@ def compute_apk_hashes(
     serial: str, apk_map: Dict[str, str], progress_every: int = 25
 ) -> Dict[str, str]:
     """Compute SHA-256 hashes for APKs in ``apk_map``."""
-
     total = len(apk_map)
     log.info(f"Computing hashes for {total} packages")
 
@@ -160,15 +177,7 @@ def compute_apk_hashes(
 
 
 def analyze_packages(serial: str) -> List[PackageReport]:
-    """Gather package, permission, and risk information for ``serial``.
-
-    The returned list contains a :class:`PackageReport` entry for each
-    package installed on the device. Each entry includes the package
-    category, the full permission list, any dangerous permissions that
-    were requested, and a simple risk score equal to the number of
-    dangerous permissions.
-    """
-
+    """Gather package, permission, and risk information for ``serial``."""
     perms_map = get_all_package_permissions(serial)
     apk_paths = get_installed_apk_paths(serial)
     verified_apks, missing = verify_package_apks(perms_map.keys(), apk_paths)
@@ -188,11 +197,18 @@ def analyze_packages(serial: str) -> List[PackageReport]:
         perms = perms_map.get(pkg, [])
         dangerous = [p for p in perms if p in SENSITIVE_PERMISSIONS]
         risk = len(dangerous)
+
         category = get_category(pkg)
         apk_hash = hashes.get(pkg)
-        log.debug(
-            f"Package {pkg}: category={category}, risk={risk}, dangerous={dangerous}, hash={apk_hash}"
-        )
+
+        # Optional artifact analysis (if available)
+        artifacts = None
+        try:
+            from . import string_finder
+            artifacts = string_finder.find_artifacts(serial, pkg)
+        except ImportError:
+            pass
+
         reports.append(
             PackageReport(
                 name=pkg,
@@ -201,6 +217,7 @@ def analyze_packages(serial: str) -> List[PackageReport]:
                 dangerous_permissions=dangerous,
                 risk_score=risk,
                 apk_hash=apk_hash,
+                artifacts=artifacts,
             )
         )
 
@@ -213,4 +230,3 @@ def analyze_packages(serial: str) -> List[PackageReport]:
     )
 
     return reports
-

@@ -23,6 +23,10 @@ def analyze_device(serial: str) -> None:
             print(f"     ⚠ {perm}")
         if len(rep.dangerous_permissions) > 5:
             print("     ...")
+        for art in rep.artifacts[:3]:
+            print(f"     🔑 {art}")
+        if len(rep.artifacts) > 3:
+            print("     ...")
 
     flagged = [r for r in reports if r.risk_score]
     category_counts = Counter(r.category for r in reports)
@@ -41,6 +45,9 @@ def analyze_device(serial: str) -> None:
             print(
                 f" - {rep.name} [{rep.category}] risk={rep.risk_score} :: {perms}"
             )
+            if rep.artifacts:
+                arts = ", ".join(rep.artifacts[:3])
+                print(f"     artifacts: {arts}")
 
     print()
     log.info(f"Static analysis complete for {serial}")
