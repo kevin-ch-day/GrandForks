@@ -104,7 +104,7 @@ def test_display_selection_devices_print(monkeypatch, capfd):
     assert fields[1] == "Google"
     assert fields[2] == "Pixel 4"
     assert fields[3] == "ABC123"
-    assert fields[4] == "Physical"
+    assert fields[4] == "[Physical]"
     assert fields[5] == "device"
 
 

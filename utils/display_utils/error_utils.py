@@ -4,10 +4,13 @@ import sys
 import traceback
 from typing import Optional
 
+from . import theme
 
-def _print_block(title: str, icon: str, message: str) -> None:
+
+def _print_block(title: str, icon: str, message: str, key: str) -> None:
     """Internal helper to render a styled message block."""
-    print(f"\n{icon} {title}")
+    styled_title = theme.style(f"fg.{key}")(title)
+    print(f"\n{icon} {styled_title}")
     print("-" * (len(title) + 4))
     print(message)
     print("-" * (len(title) + 4) + "\n")
@@ -23,7 +26,7 @@ def show_error(message: str, exit_app: bool = False, exit_code: int = 1, exc: Op
         exit_code (int): Exit code when terminating (default 1).
         exc (Exception): Optional exception to include traceback for debugging.
     """
-    _print_block("ERROR", "❌", message)
+    _print_block("ERROR", "❌", message, "error")
 
     if exc:
         print("🔎 Debug Traceback:")
@@ -35,12 +38,12 @@ def show_error(message: str, exit_app: bool = False, exit_code: int = 1, exc: Op
 
 def show_warning(message: str) -> None:
     """Display a formatted warning message."""
-    _print_block("WARNING", "⚠️", message)
+    _print_block("WARNING", "⚠️", message, "warning")
 
 
 def show_info(message: str) -> None:
     """Display a formatted info message."""
-    _print_block("INFO", "ℹ️", message)
+    _print_block("INFO", "ℹ️", message, "info")
 
 
 def handle_error(message: str, exc: Optional[Exception] = None, exit_app: bool = False) -> None:

@@ -2,7 +2,7 @@
 
 import sys
 from typing import Callable, Dict, Tuple, List, Optional
-from utils.display_utils import prompt_utils, error_utils
+from utils.display_utils import prompt_utils, error_utils, theme
 import utils.logging_utils.logging_engine as log
 
 
@@ -11,31 +11,24 @@ class MenuExit(Exception):
     pass
 
 
-try:
-    from colorama import Fore, Style, init as colorama_init
-    colorama_init(autoreset=True)
-except ImportError:
-    class _NoColor:
-        RED = YELLOW = CYAN = RESET_ALL = ""
-    Fore = Style = _NoColor()
-
-
 # ---------- Rendering Helpers ----------
 
 def print_menu_header(title: str) -> None:
     """Render a styled header for the menu."""
-    print("\n" + "=" * 50)
-    print(f"{Fore.CYAN}{title}{Style.RESET_ALL}")
-    print("=" * 50)
+    print("\n" + theme.hr("bar", 50))
+    print(theme.header(title))
+    print(theme.hr("bar", 50))
 
 
 def print_menu_options(options: Dict[str, Tuple[str, Callable]], exit_label: str) -> None:
     """Render all menu options in sorted order."""
     for key in sorted(options.keys(), key=lambda x: int(x)):
         label, _ = options[key]
-        print(f" [{key}] {label}")
-    print(f" [0] {exit_label}")
-    print("-" * 50)
+        hot = theme.style("fg.accent", "bold")(f"[{key}]")
+        print(f" {hot} {label}")
+    hot = theme.style("fg.accent", "bold")("[0]")
+    print(f" {hot} {exit_label}")
+    print(theme.hr("thin", 50))
 
 
 # ---------- Input Handling ----------
@@ -93,7 +86,7 @@ def show_menu(
 def run_menu_action(label: str, action: Callable) -> None:
     """Run a menu action safely with error handling."""
     try:
-        print(f"\n▶ Running: {label}\n")
+        print(theme.style("fg.accent", "bold")(f"\n▶ Running: {label}\n"))
         action()
     except KeyboardInterrupt:
         print("\n⚠️  Action interrupted by user.\n")
@@ -128,9 +121,11 @@ def simple_menu(title: str, items: List[str], exit_label: str = "Back") -> int:
     while True:
         print_menu_header(title)
         for idx, item in enumerate(items, start=1):
-            print(f" [{idx}] {item}")
-        print(f" [0] {exit_label}")
-        print("-" * 50)
+            hot = theme.style("fg.accent", "bold")(f"[{idx}]")
+            print(f" {hot} {item}")
+        hot = theme.style("fg.accent", "bold")("[0]")
+        print(f" {hot} {exit_label}")
+        print(theme.hr("thin", 50))
 
         choice = _get_choice()
 

@@ -1,9 +1,10 @@
 # main.py
 import sys
 import signal
+import argparse
 
 from config import app_config
-from utils.display_utils import menu_utils, error_utils
+from utils.display_utils import menu_utils, error_utils, theme
 import utils.logging_utils.logging_engine as log
 from device import show_devices, connect_to_device
 from utils.about_app import about_app
@@ -52,6 +53,17 @@ def handle_interrupt(sig, frame):
 
 def main():
     """Main entry point for the Android Tool CLI."""
+    parser = argparse.ArgumentParser(add_help=False)
+    parser.add_argument(
+        "--theme",
+        choices=theme.available_palettes(),
+        help="Color theme to use",
+    )
+    args, _ = parser.parse_known_args()
+
+    # Set theme from CLI flag or config default
+    theme.set_palette(args.theme or app_config.THEME_PALETTE)
+
     # Trap Ctrl+C
     signal.signal(signal.SIGINT, handle_interrupt)
 
