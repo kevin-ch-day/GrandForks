@@ -8,6 +8,7 @@ set -Eeuo pipefail
 : "${AAF_LOG_LEVEL:=2}"      # 0=ERROR,1=WARN,2=INFO,3=DEBUG
 : "${AAF_NO_COLOR:=0}"       # 1 to disable colors
 : "${AAF_SHELL_TIMEOUT:=12}" # seconds for single adb shell ops when 'timeout' exists
+: "${AAF_ALLOW_NOISY:=1}"     # 0 to skip probes that may create log noise
 
 # Colors
 if [[ "$AAF_NO_COLOR" -eq 0 ]]; then
@@ -101,7 +102,9 @@ aaf_is_present() {
 
 aaf_search_keywords() {
   local adb="$1" user="$2" keyword="$3"
-  aaf_shell "$adb" "pm list packages --user $user | cut -d: -f2 | grep -i -- $(printf %q "$keyword")" 2>/dev/null | tr -d '\r' || true
+  aaf_shell "$adb" \
+    "pm list packages --user $user | cut -d: -f2 | grep -i -- $(printf %q \"$keyword\")" \
+    2>/dev/null | tr -d '\r' || true
 }
 
 aaf_list_disabled() {
@@ -119,8 +122,14 @@ aaf_pkg_meta() {
   uid="$(awk '/userId=/{sub(/userId=/,""); print $1; exit}' <<<"$ds")"
   finst="$(awk -F= '/firstInstallTime=/{print $2; exit}' <<<"$ds")"
   lupd="$(awk -F= '/lastUpdateTime=/{print $2; exit}' <<<"$ds")"
-  installer="$(aaf_shell "$adb" "pm list packages -i | awk -F\"[ :]\" '\$1==\"package\" && \$2==\"$pkg\" {for(i=1;i<=NF;i++) if(\$i ~ /^installer=/){sub(\"installer=\",\"\",\$i); print \$i; break}}'")" || true
-  enabled="$(aaf_shell "$adb" "cmd package dump $pkg 2>/dev/null | awk '/Packages:/{f=1} f && /enabled=/ {print; exit}'")" || true
+  installer="$(
+    aaf_shell "$adb" \
+      "pm list packages -i | awk -F\\\"[ :]\\\" '\$1==\\\"package\\\" && \$2==\\\"$pkg\\\" {for(i=1;i<=NF;i++) if(\$i ~ /^installer=/){sub(\\\"installer=\\\",\\\"\\\",\$i); print \$i; break}}'"
+  )" || true
+  enabled="$(
+    aaf_shell "$adb" \
+      "cmd package dump $pkg 2>/dev/null | awk '/Packages:/{f=1} f && /enabled=/ {print; exit}'"
+  )" || true
   printf '%s|%s|%s|%s|%s|%s|%s|%s\n' "${vn:-}" "${vc:-}" "${sdk:-}" "${uid:-}" "${finst:-}" "${lupd:-}" "${installer//$'\r'/}" "${enabled//$'\r'/}"
 }
 
@@ -167,7 +176,11 @@ aaf_collect_text() {
   local adb="$1" outdir="$2" pkg="$3"
   mkdir -p "$outdir"
   aaf_shell "$adb" "dumpsys package $pkg" >"$outdir/$pkg.dumpsys.txt" 2>/dev/null || true
-  aaf_shell "$adb" "appops get $pkg" >"$outdir/$pkg.appops.txt" 2>/dev/null || true
+  printf '%s/%s.dumpsys.txt\n' "$outdir" "$pkg"
+  if [[ "${AAF_ALLOW_NOISY:-1}" -eq 1 ]]; then
+    aaf_shell "$adb" "appops get $pkg" >"$outdir/$pkg.appops.txt" 2>/dev/null || true
+    printf '%s/%s.appops.txt\n' "$outdir" "$pkg"
+  fi
 }
 
 aaf_collect_apks() {
@@ -176,7 +189,11 @@ aaf_collect_apks() {
   aaf_shell "$adb" "pm path --user $user $pkg | sed 's/^package://'" | tr -d '\r' | while read -r ap; do
     [[ -z "$ap" ]] && continue
     local name="${pkg}_$(basename "$ap")"
-    adb pull "$ap" "$outdir/$name" >/dev/null 2>&1 || aaf_log WARN "Pull failed: $ap"
+    if adb pull "$ap" "$outdir/$name" >/dev/null 2>&1; then
+      printf '%s/%s\n' "$outdir" "$name"
+    else
+      aaf_log WARN "Pull failed: $ap"
+    fi
   done
 }
 
@@ -187,9 +204,60 @@ aaf_collect_sdcard_data() {
     if aaf_shell "$adb" "[ -d $base/$pkg ]"; then
       local tarname="${pkg}_$(basename "$base").tar"
       aaf_shell "$adb" "tar -cf /sdcard/$tarname -C $base $pkg" || true
-      adb pull "/sdcard/$tarname" "$outdir/$tarname" >/dev/null 2>&1 || aaf_log WARN "Pull failed: $tarname"
+      if adb pull "/sdcard/$tarname" "$outdir/$tarname" >/dev/null 2>&1; then
+        printf '%s/%s\n' "$outdir" "$tarname"
+      else
+        aaf_log WARN "Pull failed: $tarname"
+      fi
     fi
   done
+}
+
+aaf_probe_exported() {
+  # Enumerate exported components and attempt benign opens
+  local adb="$1" pkg="$2" ds comp results=()
+  ds="$(aaf_shell "$adb" "dumpsys package $pkg" 2>/dev/null | tr -d '\r')" || true
+  while read -r comp; do
+    local uri="content://$comp"
+    aaf_shell "$adb" "content query --uri $uri --limit 1" >/dev/null 2>&1 || true
+    results+=("provider:$comp")
+  done < <(awk '/Providers:/{f=1;next}/^[A-Z]/{f=0}f && /name=/ && /exported=true/ {print $2}' <<<"$ds")
+  while read -r comp; do
+    aaf_shell "$adb" "am start -W -n $comp" >/dev/null 2>&1 || true
+    results+=("activity:$comp")
+  done < <(awk '/Activities:/{f=1;next}/^[A-Z]/{f=0}f && /name=/ && /exported=true/ {print $2}' <<<"$ds")
+  printf '%s\n' "${results[*]}"
+}
+
+aaf_apk_heuristics() {
+  # Basic static risk heuristics on APKs
+  local apk="$1" hs=()
+  if aaf_have apkanalyzer; then
+    [[ "$(apkanalyzer manifest application-debuggable "$apk" 2>/dev/null)" == "true" ]] && hs+=("debuggable")
+    [[ "$(apkanalyzer manifest application-allow-backup "$apk" 2>/dev/null)" == "true" ]] && hs+=("allowBackup")
+  elif aaf_have aapt; then
+    local badging
+    badging="$(aapt dump badging "$apk" 2>/dev/null)" || true
+    grep -q "application-debuggable" <<<"$badging" && hs+=("debuggable")
+    grep -q "allowBackup='true'" <<<"$badging" && hs+=("allowBackup")
+  fi
+  printf '%s\n' "${hs[*]}"
+}
+
+aaf_scan_rulesets() {
+  # Scan extracted SD card data for operator-supplied patterns
+  local tarfile="$1" pkg="$2" outdir="$3"; shift 3
+  local rulesets=("$@")
+  [[ ${#rulesets[@]} -eq 0 ]] && return 0
+  mkdir -p "$outdir"
+  local tmp
+  tmp="$(mktemp -d)"
+  tar -xf "$tarfile" -C "$tmp" || return 0
+  for rs in "${rulesets[@]}"; do
+    local base="$(basename "$rs")"
+    grep -R -n -a -E -f "$rs" "$tmp" >"$outdir/${pkg}_${base}.grep" 2>/dev/null || true
+  done
+  rm -rf "$tmp"
 }
 
 # --------------- Utilities ---------------
@@ -203,4 +271,38 @@ aaf_dedupe_array() {
       seen["$x"]=1
     fi
   done
+}
+
+aaf_shuffle_array() { printf '%s\n' "$@" | shuf; }
+
+aaf_sleep_jitter() {
+  local min_ms="$1" max_ms="$2"
+  [[ -z "$max_ms" || "$max_ms" -eq 0 ]] && return 0
+  local span=$((max_ms - min_ms))
+  [[ $span -lt 0 ]] && span=0
+  local delay_ms=$((RANDOM % (span + 1) + min_ms))
+  local delay_s
+  delay_s="$(awk "BEGIN{printf '%.3f', $delay_ms/1000}")"
+  sleep "$delay_s"
+}
+
+aaf_defense_scan() {
+  local adb="$1" findings=() pkgs device_owner
+  local sensors=(
+    com.microsoft.intune
+    com.mobileiron
+    com.sentinelone
+    com.zimperium.zips
+    com.citrix.emea.mdmdiff
+  )
+  pkgs="$(aaf_shell "$adb" "pm list packages" 2>/dev/null | cut -d: -f2 | tr -d '\r' || true)"
+  for s in "${sensors[@]}"; do
+    if grep -q "^$s$" <<<"$pkgs"; then findings+=("pkg:$s"); fi
+  done
+  device_owner="$(aaf_shell "$adb" "settings get global device_owner" 2>/dev/null | tr -d '\r')"
+  [[ -n "$device_owner" && "$device_owner" != "null" ]] && findings+=("device_owner:$device_owner")
+  if aaf_shell "$adb" "dumpsys devicepolicy" 2>/dev/null | grep -q 'Device Owner'; then
+    findings+=("devicepolicy")
+  fi
+  printf '%s\n' "${findings[@]}"
 }
