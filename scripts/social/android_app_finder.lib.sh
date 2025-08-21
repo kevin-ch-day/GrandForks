@@ -45,18 +45,31 @@ aaf_adb_cmd() {
 }
 
 aaf_select_device() {
-  # If SERIAL is empty and multiple devices are present, fail with a hint.
-  local devices
-  devices="$(adb devices -l | awk 'NR>1 && $1!="" {print $1 ":" $2}')" || true
-  local count
-  count="$(printf '%s\n' "$devices" | grep -c . || true)"
-  if [[ "$count" -eq 0 ]]; then
+  # Prompt the operator to choose a device when multiple are attached.
+  local devs=( )
+  mapfile -t devs < <(adb devices -l | awk 'NR>1 && $1!="" {print $1}') || true
+  local count=${#devs[@]}
+  if [[ $count -eq 0 ]]; then
     aaf_die "No ADB devices. Plug in a phone and run: adb devices"
-  elif [[ "$count" -gt 1 ]]; then
-    aaf_log WARN "Multiple devices detected:"
-    printf '%s\n' "$devices" 1>&2
-    aaf_die "Specify one with --serial SERIAL or --ip HOST:PORT"
+  elif [[ $count -eq 1 ]]; then
+    SERIAL="${devs[0]}"
+    return
   fi
+
+  aaf_log INFO "Select a device to scan:" 
+  local i=1
+  for d in "${devs[@]}"; do
+    local model
+    model="$(adb -s "$d" shell getprop ro.product.model 2>/dev/null | tr -d '\r')"
+    printf ' %d) %s (%s)\n' "$i" "$d" "$model" 1>&2
+    ((i++))
+  done
+  local choice
+  read -rp "Enter choice [1-${count}]: " choice
+  if ! [[ "$choice" =~ ^[0-9]+$ ]] || (( choice < 1 || choice > count )); then
+    aaf_die "Invalid selection"
+  fi
+  SERIAL="${devs[$((choice-1))]}"
 }
 
 aaf_get_state() { eval "$1 get-state 2>/dev/null || true"; }
@@ -148,21 +161,6 @@ aaf_csv_line() {
     "$(aaf_csv_escape "$paths")" \
     "$(aaf_csv_escape "${vn:-}")" "${vc:-}" "${sdk:-}" "${uid:-}" \
     "$(aaf_csv_escape "${finst:-}")" "$(aaf_csv_escape "${lupd:-}")"
-}
-
-aaf_json_line() {
-  local user="$1" pkg="$2" status="$3" paths="$4" meta="$5"
-  IFS='|' read -r vn vc sdk uid finst lupd installer enabled <<<"$meta"
-  if aaf_have jq; then
-    jq -nc --arg user "$user" --arg pkg "$pkg" --arg status "$status" \
-      --arg paths "$paths" --arg vn "$vn" --arg vc "$vc" --arg sdk "$sdk" \
-      --arg uid "$uid" --arg finst "$finst" --arg lupd "$lupd" \
-      --arg installer "$installer" --arg enabled "$enabled" \
-      '{user:$user, package:$pkg, status:$status, apk_paths:$paths, versionName:$vn, versionCode:$vc, targetSdk:$sdk, uid:$uid, firstInstallTime:$finst, lastUpdateTime:$lupd, installer:$installer, enabled:$enabled}'
-  else
-    printf '{"user":"%s","package":"%s","status":"%s","apk_paths":"%s","versionName":"%s","versionCode":"%s","targetSdk":"%s","uid":"%s","firstInstallTime":"%s","lastUpdateTime":"%s","installer":"%s","enabled":"%s"}\n' \
-      "$user" "$pkg" "$status" "$paths" "${vn:-}" "${vc:-}" "${sdk:-}" "${uid:-}" "${finst:-}" "${lupd:-}" "${installer:-}" "${enabled:-}"
-  fi
 }
 
 # --------------- Actions ---------------

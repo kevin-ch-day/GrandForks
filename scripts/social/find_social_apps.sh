@@ -24,8 +24,8 @@ Scope:
   --filter REGEX            Filter package list with grep -E.
 
 Output:
-  --csv FILE                Write CSV inventory.
-  --json FILE               Write NDJSON (one JSON object per line).
+  --csv FILE                Write CSV inventory (default: social_apps.csv).
+  --report FILE             Write plain-text summary (default: social_apps_report.txt).
   --outdir DIR              Collect artifacts (dumpsys/appops; optional APKs/data).
 
 Actions:
@@ -50,19 +50,18 @@ Logging:
 
 Examples:
   ./find_social_apps.sh
-  ./find_social_apps.sh --serial ZY22JK89DR --csv social.csv --json social.jsonl
+  ./find_social_apps.sh --serial ZY22JK89DR --csv my.csv --report report.txt
   ./find_social_apps.sh --keywords "facebook twitter tiktok snap" --include-disabled
   ./find_social_apps.sh --outdir artifacts --collect-apks --collect-sdcard --test-launch
 
 Fedora prerequisites:
   sudo dnf install -y android-tools   # adb
-  sudo dnf install -y jq              # optional (prettier JSON)
 EOF
 }
 
 # ------------ Defaults ------------
 SERIAL=""; IP=""
-CSV=""; JSON=""; OUTDIR=""
+CSV="social_apps.csv"; REPORT="social_apps_report.txt"; OUTDIR=""
 USER_ID=""; ALL_USERS=1
 TIMEOUT_S=5
 INCLUDE_DISABLED=0
@@ -103,7 +102,7 @@ while [[ $# -gt 0 ]]; do
     --serial) SERIAL="${2:-}"; shift 2;;
     --ip) IP="${2:-}"; shift 2;;
     --csv) CSV="${2:-}"; shift 2;;
-    --json) JSON="${2:-}"; shift 2;;
+    --report) REPORT="${2:-}"; shift 2;;
     --outdir) OUTDIR="${2:-}"; shift 2;;
     --user) USER_ID="${2:-}"; ALL_USERS=0; shift 2;;
     --all-users) ALL_USERS=1; shift;;
@@ -250,9 +249,11 @@ aaf_log DEBUG "Final package set (#${#PKGS[@]}): ${PKGS[*]}"
 # ------------ Outputs ------------
 if [[ -n "$CSV" ]]; then
   aaf_csv_header > "$CSV"
+  OPSEC_FILES+=("$CSV")
 fi
-if [[ -n "$JSON" ]]; then
-  : > "$JSON"
+if [[ -n "$REPORT" ]]; then
+  printf 'User Package APK_Paths\n' > "$REPORT"
+  OPSEC_FILES+=("$REPORT")
 fi
 
 APKS_DIR=""; DATA_DIR=""; TXT_DIR=""; FINDINGS_FILE=""
@@ -278,7 +279,7 @@ scan_user() {
       ANY_FOUND=1
       meta="$(aaf_pkg_meta "$ADB" "$p")"
       [[ -n "$CSV"  ]] && aaf_csv_line  "$u" "$p" "FOUND"  "$paths" "$meta" >> "$CSV"
-      [[ -n "$JSON" ]] && aaf_json_line "$u" "$p" "FOUND"  "$paths" "$meta" >> "$JSON"
+      [[ -n "$REPORT" ]] && printf '%s %s %s\n' "$u" "$p" "$paths" >> "$REPORT"
       if [[ -n "$TXT_DIR" ]]; then
         while IFS= read -r f; do OPSEC_FILES+=("$f"); done < <(aaf_collect_text "$ADB" "$TXT_DIR" "$p")
         OPSEC_ACTIONS+=(collect-text)
@@ -312,9 +313,9 @@ scan_user() {
       fi
     else
       printf 'MISSING %s\n' "$p"
-      empty_meta="||||||||" # 8 pipes → 9 fields (empty) for csv/json consistency
+      empty_meta="||||||||" # 8 pipes → 9 fields (empty) for csv consistency
       [[ -n "$CSV"  ]] && aaf_csv_line  "$u" "$p" "MISSING" "" "$empty_meta" >> "$CSV"
-      [[ -n "$JSON" ]] && aaf_json_line "$u" "$p" "MISSING" "" "$empty_meta" >> "$JSON"
+      [[ -n "$REPORT" ]] && printf '%s %s MISSING\n' "$u" "$p" >> "$REPORT"
       [[ -n "$FINDINGS_FILE" ]] && printf '%s,,,,\n' "$p" >> "$FINDINGS_FILE"
     fi
   done
@@ -325,8 +326,8 @@ for u in $USERS; do
 done
 
 # ------------ Summary ------------
-[[ -n "$CSV"  ]] && aaf_log INFO "CSV:  $(readlink -f "$CSV")"
-[[ -n "$JSON" ]] && aaf_log INFO "JSON: $(readlink -f "$JSON")"
+[[ -n "$CSV"    ]] && aaf_log INFO "CSV:    $(readlink -f "$CSV")"
+[[ -n "$REPORT" ]] && aaf_log INFO "Report: $(readlink -f "$REPORT")"
 [[ -n "$OUTDIR" ]] && aaf_log INFO "Artifacts in: $(readlink -f "$OUTDIR")"
 printf '--- OPSEC SUMMARY ---\n'
 printf 'Noise budget: %s\n' "$NOISE_BUDGET"
