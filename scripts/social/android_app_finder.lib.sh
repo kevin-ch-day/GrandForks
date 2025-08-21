@@ -8,12 +8,13 @@ set -Eeuo pipefail
 : "${AAF_LOG_LEVEL:=2}"      # 0=ERROR,1=WARN,2=INFO,3=DEBUG
 : "${AAF_NO_COLOR:=0}"       # 1 to disable colors
 : "${AAF_SHELL_TIMEOUT:=12}" # seconds for single adb shell ops when 'timeout' exists
+: "${AAF_ALLOW_NOISY:=1}"     # 0 to skip probes that may create log noise
 
 # Colors
 if [[ "$AAF_NO_COLOR" -eq 0 ]]; then
-  AAF_C_ERR=$'\e[31m'; AAF_C_WRN=$'\e[33m'; AAF_C_INF=$'\e[36m'; AAF_C_DBG=$'\e[90m'; AAF_C_RST=$'\e[0m'
+  AAF_C_ERR=$'\e[31m'; AAF_C_WRN=$'\e[33m'; AAF_C_OK=$'\e[32m'; AAF_C_INF=$'\e[36m'; AAF_C_DBG=$'\e[90m'; AAF_C_RST=$'\e[0m'
 else
-  AAF_C_ERR=""; AAF_C_WRN=""; AAF_C_INF=""; AAF_C_DBG=""; AAF_C_RST=""
+  AAF_C_ERR=""; AAF_C_WRN=""; AAF_C_OK=""; AAF_C_INF=""; AAF_C_DBG=""; AAF_C_RST=""
 fi
 
 aaf_log() {
@@ -33,6 +34,30 @@ aaf_log() {
 aaf_die() { aaf_log ERROR "$*"; exit 1; }
 aaf_have() { command -v "$1" >/dev/null 2>&1; }
 
+# Format status labels with optional color. Usage: aaf_fmt_status FOUND
+aaf_fmt_status() {
+  local s="$1"
+  case "$s" in
+    FOUND)
+      if [[ "$AAF_NO_COLOR" -eq 0 ]]; then
+        printf '%s%s%s' "$AAF_C_OK" "$s" "$AAF_C_RST"
+      else
+        printf '%s' "$s"
+      fi
+      ;;
+    MISSING)
+      if [[ "$AAF_NO_COLOR" -eq 0 ]]; then
+        printf '%s%s%s' "$AAF_C_ERR" "$s" "$AAF_C_RST"
+      else
+        printf '%s' "$s"
+      fi
+      ;;
+    *)
+      printf '%s' "$s"
+      ;;
+  esac
+}
+
 # --------------- ADB Resolution ---------------
 aaf_adb_cmd() {
   local serial="${1:-}"
@@ -44,18 +69,31 @@ aaf_adb_cmd() {
 }
 
 aaf_select_device() {
-  # If SERIAL is empty and multiple devices are present, fail with a hint.
-  local devices
-  devices="$(adb devices -l | awk 'NR>1 && $1!="" {print $1 ":" $2}')" || true
-  local count
-  count="$(printf '%s\n' "$devices" | grep -c . || true)"
-  if [[ "$count" -eq 0 ]]; then
+  # Prompt the operator to choose a device when multiple are attached.
+  local devs=( )
+  mapfile -t devs < <(adb devices -l | awk 'NR>1 && $1!="" {print $1}') || true
+  local count=${#devs[@]}
+  if [[ $count -eq 0 ]]; then
     aaf_die "No ADB devices. Plug in a phone and run: adb devices"
-  elif [[ "$count" -gt 1 ]]; then
-    aaf_log WARN "Multiple devices detected:"
-    printf '%s\n' "$devices" 1>&2
-    aaf_die "Specify one with --serial SERIAL or --ip HOST:PORT"
+  elif [[ $count -eq 1 ]]; then
+    SERIAL="${devs[0]}"
+    return
   fi
+
+  aaf_log INFO "Select a device to scan:" 
+  local i=1
+  for d in "${devs[@]}"; do
+    local model
+    model="$(adb -s "$d" shell getprop ro.product.model 2>/dev/null | tr -d '\r')"
+    printf ' %d) %s (%s)\n' "$i" "$d" "$model" 1>&2
+    ((i++))
+  done
+  local choice
+  read -rp "Enter choice [1-${count}]: " choice
+  if ! [[ "$choice" =~ ^[0-9]+$ ]] || (( choice < 1 || choice > count )); then
+    aaf_die "Invalid selection"
+  fi
+  SERIAL="${devs[$((choice-1))]}"
 }
 
 aaf_get_state() { eval "$1 get-state 2>/dev/null || true"; }
@@ -101,7 +139,9 @@ aaf_is_present() {
 
 aaf_search_keywords() {
   local adb="$1" user="$2" keyword="$3"
-  aaf_shell "$adb" "pm list packages --user $user | cut -d: -f2 | grep -i -- $(printf %q "$keyword")" 2>/dev/null | tr -d '\r' || true
+  aaf_shell "$adb" \
+    "pm list packages --user $user | cut -d: -f2 | grep -i -- $(printf %q \"$keyword\")" \
+    2>/dev/null | tr -d '\r' || true
 }
 
 aaf_list_disabled() {
@@ -119,8 +159,14 @@ aaf_pkg_meta() {
   uid="$(awk '/userId=/{sub(/userId=/,""); print $1; exit}' <<<"$ds")"
   finst="$(awk -F= '/firstInstallTime=/{print $2; exit}' <<<"$ds")"
   lupd="$(awk -F= '/lastUpdateTime=/{print $2; exit}' <<<"$ds")"
-  installer="$(aaf_shell "$adb" "pm list packages -i | awk -F\"[ :]\" '\$1==\"package\" && \$2==\"$pkg\" {for(i=1;i<=NF;i++) if(\$i ~ /^installer=/){sub(\"installer=\",\"\",\$i); print \$i; break}}'")" || true
-  enabled="$(aaf_shell "$adb" "cmd package dump $pkg 2>/dev/null | awk '/Packages:/{f=1} f && /enabled=/ {print; exit}'")" || true
+  installer="$(
+    aaf_shell "$adb" \
+      "pm list packages -i | awk -F\\\"[ :]\\\" '\$1==\\\"package\\\" && \$2==\\\"$pkg\\\" {for(i=1;i<=NF;i++) if(\$i ~ /^installer=/){sub(\\\"installer=\\\",\\\"\\\",\$i); print \$i; break}}'"
+  )" || true
+  enabled="$(
+    aaf_shell "$adb" \
+      "cmd package dump $pkg 2>/dev/null | awk '/Packages:/{f=1} f && /enabled=/ {print; exit}'"
+  )" || true
   printf '%s|%s|%s|%s|%s|%s|%s|%s\n' "${vn:-}" "${vc:-}" "${sdk:-}" "${uid:-}" "${finst:-}" "${lupd:-}" "${installer//$'\r'/}" "${enabled//$'\r'/}"
 }
 
@@ -141,21 +187,6 @@ aaf_csv_line() {
     "$(aaf_csv_escape "${finst:-}")" "$(aaf_csv_escape "${lupd:-}")"
 }
 
-aaf_json_line() {
-  local user="$1" pkg="$2" status="$3" paths="$4" meta="$5"
-  IFS='|' read -r vn vc sdk uid finst lupd installer enabled <<<"$meta"
-  if aaf_have jq; then
-    jq -nc --arg user "$user" --arg pkg "$pkg" --arg status "$status" \
-      --arg paths "$paths" --arg vn "$vn" --arg vc "$vc" --arg sdk "$sdk" \
-      --arg uid "$uid" --arg finst "$finst" --arg lupd "$lupd" \
-      --arg installer "$installer" --arg enabled "$enabled" \
-      '{user:$user, package:$pkg, status:$status, apk_paths:$paths, versionName:$vn, versionCode:$vc, targetSdk:$sdk, uid:$uid, firstInstallTime:$finst, lastUpdateTime:$lupd, installer:$installer, enabled:$enabled}'
-  else
-    printf '{"user":"%s","package":"%s","status":"%s","apk_paths":"%s","versionName":"%s","versionCode":"%s","targetSdk":"%s","uid":"%s","firstInstallTime":"%s","lastUpdateTime":"%s","installer":"%s","enabled":"%s"}\n' \
-      "$user" "$pkg" "$status" "$paths" "${vn:-}" "${vc:-}" "${sdk:-}" "${uid:-}" "${finst:-}" "${lupd:-}" "${installer:-}" "${enabled:-}"
-  fi
-}
-
 # --------------- Actions ---------------
 aaf_test_launch() {
   local adb="$1" user="$2" pkg="$3" timeout_s="${4:-5}"
@@ -167,7 +198,11 @@ aaf_collect_text() {
   local adb="$1" outdir="$2" pkg="$3"
   mkdir -p "$outdir"
   aaf_shell "$adb" "dumpsys package $pkg" >"$outdir/$pkg.dumpsys.txt" 2>/dev/null || true
-  aaf_shell "$adb" "appops get $pkg" >"$outdir/$pkg.appops.txt" 2>/dev/null || true
+  printf '%s/%s.dumpsys.txt\n' "$outdir" "$pkg"
+  if [[ "${AAF_ALLOW_NOISY:-1}" -eq 1 ]]; then
+    aaf_shell "$adb" "appops get $pkg" >"$outdir/$pkg.appops.txt" 2>/dev/null || true
+    printf '%s/%s.appops.txt\n' "$outdir" "$pkg"
+  fi
 }
 
 aaf_collect_apks() {
@@ -176,7 +211,11 @@ aaf_collect_apks() {
   aaf_shell "$adb" "pm path --user $user $pkg | sed 's/^package://'" | tr -d '\r' | while read -r ap; do
     [[ -z "$ap" ]] && continue
     local name="${pkg}_$(basename "$ap")"
-    adb pull "$ap" "$outdir/$name" >/dev/null 2>&1 || aaf_log WARN "Pull failed: $ap"
+    if adb pull "$ap" "$outdir/$name" >/dev/null 2>&1; then
+      printf '%s/%s\n' "$outdir" "$name"
+    else
+      aaf_log WARN "Pull failed: $ap"
+    fi
   done
 }
 
@@ -187,9 +226,60 @@ aaf_collect_sdcard_data() {
     if aaf_shell "$adb" "[ -d $base/$pkg ]"; then
       local tarname="${pkg}_$(basename "$base").tar"
       aaf_shell "$adb" "tar -cf /sdcard/$tarname -C $base $pkg" || true
-      adb pull "/sdcard/$tarname" "$outdir/$tarname" >/dev/null 2>&1 || aaf_log WARN "Pull failed: $tarname"
+      if adb pull "/sdcard/$tarname" "$outdir/$tarname" >/dev/null 2>&1; then
+        printf '%s/%s\n' "$outdir" "$tarname"
+      else
+        aaf_log WARN "Pull failed: $tarname"
+      fi
     fi
   done
+}
+
+aaf_probe_exported() {
+  # Enumerate exported components and attempt benign opens
+  local adb="$1" pkg="$2" ds comp results=()
+  ds="$(aaf_shell "$adb" "dumpsys package $pkg" 2>/dev/null | tr -d '\r')" || true
+  while read -r comp; do
+    local uri="content://$comp"
+    aaf_shell "$adb" "content query --uri $uri --limit 1" >/dev/null 2>&1 || true
+    results+=("provider:$comp")
+  done < <(awk '/Providers:/{f=1;next}/^[A-Z]/{f=0}f && /name=/ && /exported=true/ {print $2}' <<<"$ds")
+  while read -r comp; do
+    aaf_shell "$adb" "am start -W -n $comp" >/dev/null 2>&1 || true
+    results+=("activity:$comp")
+  done < <(awk '/Activities:/{f=1;next}/^[A-Z]/{f=0}f && /name=/ && /exported=true/ {print $2}' <<<"$ds")
+  printf '%s\n' "${results[*]}"
+}
+
+aaf_apk_heuristics() {
+  # Basic static risk heuristics on APKs
+  local apk="$1" hs=()
+  if aaf_have apkanalyzer; then
+    [[ "$(apkanalyzer manifest application-debuggable "$apk" 2>/dev/null)" == "true" ]] && hs+=("debuggable")
+    [[ "$(apkanalyzer manifest application-allow-backup "$apk" 2>/dev/null)" == "true" ]] && hs+=("allowBackup")
+  elif aaf_have aapt; then
+    local badging
+    badging="$(aapt dump badging "$apk" 2>/dev/null)" || true
+    grep -q "application-debuggable" <<<"$badging" && hs+=("debuggable")
+    grep -q "allowBackup='true'" <<<"$badging" && hs+=("allowBackup")
+  fi
+  printf '%s\n' "${hs[*]}"
+}
+
+aaf_scan_rulesets() {
+  # Scan extracted SD card data for operator-supplied patterns
+  local tarfile="$1" pkg="$2" outdir="$3"; shift 3
+  local rulesets=("$@")
+  [[ ${#rulesets[@]} -eq 0 ]] && return 0
+  mkdir -p "$outdir"
+  local tmp
+  tmp="$(mktemp -d)"
+  tar -xf "$tarfile" -C "$tmp" || return 0
+  for rs in "${rulesets[@]}"; do
+    local base="$(basename "$rs")"
+    grep -R -n -a -E -f "$rs" "$tmp" >"$outdir/${pkg}_${base}.grep" 2>/dev/null || true
+  done
+  rm -rf "$tmp"
 }
 
 # --------------- Utilities ---------------
@@ -204,3 +294,4 @@ aaf_dedupe_array() {
     fi
   done
 }
+
