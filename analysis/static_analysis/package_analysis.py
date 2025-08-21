@@ -2,17 +2,17 @@
 
 from dataclasses import dataclass
 from typing import Dict, Iterable, List, Optional, Tuple
+import logging
 
 import utils.logging_utils.logging_engine as log
 from utils.adb_utils.adb_runner import run_adb_command
+from utils.display_utils.progress import Progress
 
 # Prefer modular imports, but gracefully fallback if unavailable
 try:
     from analysis.static_analysis.app_categories import get_category
     from analysis.static_analysis.permission_watchlist import SENSITIVE_PERMISSIONS
 except ImportError:
-    from . import string_finder
-
     # Hardcoded mappings (fallback if static modules missing)
     KNOWN_APPS = {
         "com.facebook.katana": "Social Media",
@@ -37,6 +37,11 @@ except ImportError:
     def get_category(pkg: str) -> str:
         """Fallback category resolver using KNOWN_APPS map."""
         return KNOWN_APPS.get(pkg, "Other")
+
+try:
+    from . import string_finder  # type: ignore
+except Exception:  # pragma: no cover - fallback if module missing
+    string_finder = None  # type: ignore
 
 
 @dataclass
@@ -72,6 +77,7 @@ def get_all_package_permissions(serial: str) -> Dict[str, List[str]]:
     current_pkg: Optional[str] = None
     count = 0
     progress_every = 25
+    ticker = Progress("Parsed permissions", every=progress_every)
     for raw_line in output.splitlines():
         line = raw_line.strip()
         if line.startswith("Package ["):
@@ -80,13 +86,14 @@ def get_all_package_permissions(serial: str) -> Dict[str, List[str]]:
                 current_pkg = line[len("Package [") : end]
                 packages[current_pkg] = []
                 count += 1
-                if count % progress_every == 0:
-                    log.info(f"Parsed permissions for {count} packages")
+                ticker.update(count)
             continue
 
         if current_pkg and line.startswith(("uses-permission:", "permission:")):
             packages[current_pkg].append(line.split(":", 1)[-1].strip())
 
+    ticker.total = count
+    ticker.update(count)
     log.info(f"Parsed permissions for {count} packages in total")
     return packages
 
@@ -94,7 +101,9 @@ def get_all_package_permissions(serial: str) -> Dict[str, List[str]]:
 def get_installed_apk_paths(serial: str) -> Dict[str, str]:
     """Return a mapping of package names to APK paths on the device."""
     log.debug(f"Listing APK paths for {serial}")
-    result = run_adb_command(serial, ["shell", "pm", "list", "packages", "-f"])
+    result = run_adb_command(
+        serial, ["shell", "pm", "list", "packages", "-f", "-u", "--user", "0"]
+    )
 
     if not result.get("success", False):
         log.warning(
@@ -133,17 +142,17 @@ def verify_package_apks(
 
     valid: Dict[str, str] = {}
     missing: List[str] = []
+    ticker = Progress("Validating APKs", total, progress_every)
     for idx, pkg in enumerate(packages, start=1):
         path = apk_paths.get(pkg)
         if path:
             valid[pkg] = path
             log.debug(f"APK for {pkg} located at {path}")
         else:
-            log.warning(f"No APK path found for {pkg}")
             missing.append(pkg)
-
-        if idx % progress_every == 0 or idx == total:
-            log.info(f"Validated {idx}/{total} packages")
+            if _is_verbose():
+                log.warning(f"No APK path found for {pkg}")
+        ticker.update(idx)
 
     return valid, missing
 
@@ -156,6 +165,7 @@ def compute_apk_hashes(
     log.info(f"Computing hashes for {total} packages")
 
     hashes: Dict[str, str] = {}
+    ticker = Progress("Hashing APKs", total, progress_every)
     for idx, (pkg, path) in enumerate(apk_map.items(), start=1):
         result = run_adb_command(serial, ["shell", "sha256sum", path])
         if result.get("success", False):
@@ -169,9 +179,7 @@ def compute_apk_hashes(
             log.warning(
                 f"Failed to hash {pkg} :: {result.get('error', 'no error provided')}"
             )
-
-        if idx % progress_every == 0 or idx == total:
-            log.info(f"Hashed {idx}/{total} packages")
+        ticker.update(idx)
 
     return hashes
 
@@ -193,6 +201,7 @@ def analyze_packages(serial: str) -> List[PackageReport]:
     log.info(f"Analyzing {total} packages on {serial}")
 
     progress_every = 10
+    ticker = Progress("Analyzing packages", total, progress_every)
     for idx, pkg in enumerate(packages, start=1):
         perms = perms_map.get(pkg, [])
         dangerous = [p for p in perms if p in SENSITIVE_PERMISSIONS]
@@ -203,11 +212,8 @@ def analyze_packages(serial: str) -> List[PackageReport]:
 
         # Optional artifact analysis (if available)
         artifacts = None
-        try:
-            from . import string_finder
+        if string_finder:
             artifacts = string_finder.find_artifacts(serial, pkg)
-        except ImportError:
-            pass
 
         reports.append(
             PackageReport(
@@ -221,12 +227,26 @@ def analyze_packages(serial: str) -> List[PackageReport]:
             )
         )
 
-        if idx % progress_every == 0 or idx == total:
-            log.info(f"Processed {idx}/{total} packages")
+        counters = string_finder.get_failure_counts() if string_finder else None
+        ticker.update(idx, counters)
 
     flagged = sum(1 for r in reports if r.risk_score)
     log.info(
         f"Generated {len(reports)} package reports for {serial}; flagged {flagged} at-risk apps"
     )
 
+    if string_finder:
+        verbose = _is_verbose()
+        string_finder.print_failure_summary(verbose=verbose)
+
     return reports
+
+
+def _is_verbose() -> bool:
+    """Check if console logging is at DEBUG level."""
+
+    logger = logging.getLogger()
+    for handler in logger.handlers:
+        if isinstance(handler, logging.StreamHandler):
+            return handler.level <= logging.DEBUG
+    return False
