@@ -21,9 +21,11 @@ def print_reports(
 
     print(f"\n📦 Installed Packages on {serial}")
     print("----------------------------------")
-    for rep in reports[:20]:
+    for rep in reports:
         risk_marker = "!" if rep.risk_score else ""
         print(f" - {rep.name} [{rep.category}] {risk_marker}")
+        if rep.apk_path:
+            print(f"     📄 {rep.apk_path}")
         for perm in rep.dangerous_permissions[:5]:
             print(f"     ⚠ {perm}")
         if len(rep.dangerous_permissions) > 5:

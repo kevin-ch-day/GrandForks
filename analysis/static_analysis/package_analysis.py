@@ -54,6 +54,7 @@ class PackageReport:
     dangerous_permissions: List[str]
     risk_score: int
     apk_hash: Optional[str] = None
+    apk_path: Optional[str] = None
     artifacts: Optional[List[str]] = None
 
 
@@ -223,6 +224,7 @@ def analyze_packages(serial: str) -> List[PackageReport]:
                 dangerous_permissions=dangerous,
                 risk_score=risk,
                 apk_hash=apk_hash,
+                apk_path=verified_apks.get(pkg),
                 artifacts=artifacts,
             )
         )
