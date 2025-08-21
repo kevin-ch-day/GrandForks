@@ -1,13 +1,18 @@
 # utils/display_utils/prompt_utils.py
 
-def ask_yes_no(question: str, default: str = "y") -> bool:
-    # Ask a yes/no question and return True/False
-    # default can be "y" or "n"
+from . import theme
 
-    choices = " [Y/n] " if default.lower() == "y" else " [y/N] "
+
+def ask_yes_no(question: str, default: str = "y") -> bool:
+    """Ask a yes/no question and return True/False."""
+
+    if default.lower() == "y":
+        choices = f" [{theme.style('fg.accent', 'bold')('Y')}/{theme.style('fg.muted')('n')}] "
+    else:
+        choices = f" [{theme.style('fg.muted')('y')}/{theme.style('fg.accent', 'bold')('N')}] "
 
     while True:
-        answer = input(f"{question}{choices}").strip().lower()
+        answer = input(f"{theme.header(question)}{choices}").strip().lower()
 
         if not answer:
             return default.lower() == "y"
@@ -17,4 +22,4 @@ def ask_yes_no(question: str, default: str = "y") -> bool:
         elif answer in ("n", "no"):
             return False
         else:
-            print("Invalid input. Please enter y or n.")
+            print(theme.style("fg.warning")("Invalid input. Please enter y or n."))

@@ -5,10 +5,11 @@ import argparse
 import logging
 
 from config import app_config
-from utils.display_utils import menu_utils, error_utils
+from utils.display_utils import menu_utils, error_utils, theme
 import utils.logging_utils.logging_engine as log
 from device import show_devices, connect_to_device
 from utils.about_app import about_app
+
 
 # ---------- Menu Actions ----------
 
@@ -47,6 +48,7 @@ def handle_interrupt(sig, frame):
     """Gracefully handle Ctrl+C interrupts."""
     print("\n\n⚠️  Interrupted by user.")
     log.warning("Application interrupted with Ctrl+C")
+    # Raise to let outer try/except handle clean exit messaging
     raise KeyboardInterrupt
 
 
@@ -56,14 +58,38 @@ def main():
     """Main entry point for the Android Tool CLI."""
     parser = argparse.ArgumentParser(description="Android Tool CLI")
     parser.add_argument(
+        "--theme",
+        choices=theme.available_palettes(),
+        help="Color theme to use (overrides config default)",
+    )
+    parser.add_argument(
         "--verbose",
         action="store_true",
         help="Enable debug logging to console",
     )
     args = parser.parse_args()
 
+    # Apply theme from flag or config default
+    selected_palette = args.theme or getattr(app_config, "THEME_PALETTE", None)
+    if selected_palette:
+        try:
+            theme.set_palette(selected_palette)
+            log.info(f"Using theme palette: {selected_palette}")
+        except Exception as e:
+            log.warning(f"Failed to set theme '{selected_palette}': {e}")
+
+    # Optional verbose console logging (only if supported by logging engine)
     if args.verbose:
-        log.set_console_level(logging.DEBUG)
+        if hasattr(log, "set_console_level"):
+            try:
+                log.set_console_level(logging.DEBUG)
+            except Exception:
+                # Fallback if API expects int or different signature
+                try:
+                    log.set_console_level("DEBUG")  # type: ignore[arg-type]
+                except Exception:
+                    pass
+        log.info("Verbose console logging enabled")
 
     # Trap Ctrl+C
     signal.signal(signal.SIGINT, handle_interrupt)
@@ -80,7 +106,7 @@ def main():
         menu_utils.show_menu(
             title=f"{app_config.APP_NAME} v{app_config.APP_VERSION}",
             options=options,
-            exit_label="Exit"
+            exit_label="Exit",
         )
     except KeyboardInterrupt:
         print("\n⚠️  Main menu interrupted. Exiting.\n")

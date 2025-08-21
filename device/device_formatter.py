@@ -6,14 +6,7 @@ from utils.adb_utils.adb_devices import DeviceInfo
 from device import vendor_normalizer
 from utils.adb_utils import adb_ip_lookup
 import utils.logging_utils.logging_engine as log
-
-# ---- Display constants ----------------------------------------------------
-BOLD = "\033[1m"
-CYAN = "\033[36m"
-GREEN = "\033[32m"
-RED = "\033[31m"
-YELLOW = "\033[33m"
-RESET = "\033[0m"
+from utils.display_utils import theme
 
 IDX_W, VENDOR_W, MODEL_W, SERIAL_W, TYPE_W, STATE_W, IP_W = 4, 12, 15, 16, 9, 10, 15
 _COLS = [IDX_W, VENDOR_W, MODEL_W, SERIAL_W, TYPE_W, STATE_W, IP_W]
@@ -30,13 +23,25 @@ def _resolve_ip(serial: str) -> str:
 
 
 def _colorize_state(state: str) -> str:
-    """Return an ANSI-colored representation of the device state."""
+    """Return a themed representation of the device connection state."""
     s = state.lower()
     if s == "device":
-        return f"{GREEN}{state}{RESET}"
-    if s == "offline":
-        return f"{RED}{state}{RESET}"
-    return f"{YELLOW}{state}{RESET}"
+        return theme.style("fg.success")(state)
+    if s in {"offline", "disconnected"}:
+        return theme.style("fg.muted")(state)
+    return theme.style("fg.warning")(state)
+
+
+def _type_badge(dev_type: str) -> str:
+    """Return a badge representing the device type."""
+    t = dev_type.lower()
+    if t == "physical":
+        return theme.badge("Physical", "med")
+    if t == "virtual":
+        return theme.badge("Virtual", "low")
+    if t == "restricted":
+        return theme.badge("Restricted", "high")
+    return dev_type
 
 
 def format_device_entry(idx: int, d: DeviceInfo) -> Dict[str, Union[str, int]]:
@@ -72,12 +77,12 @@ def format_device_entry(idx: int, d: DeviceInfo) -> Dict[str, Union[str, int]]:
 def print_device_table_header() -> None:
     """Print a table header for the short device list."""
     header = (
-        f"{BOLD}{CYAN}{'Idx':<{IDX_W}} │ {'Vendor':<{VENDOR_W}} │ "
+        f"{'Idx':<{IDX_W}} │ {'Vendor':<{VENDOR_W}} │ "
         f"{'Model':<{MODEL_W}} │ {'Serial':<{SERIAL_W}} │ "
-        f"{'Type':<{TYPE_W}} │ {'State':<{STATE_W}} │ {'IP':<{IP_W}}{RESET}"
+        f"{'Type':<{TYPE_W}} │ {'State':<{STATE_W}} │ {'IP':<{IP_W}}"
     )
-    print(header)
-    print("─" * _TABLE_WIDTH)
+    print(theme.header(header))
+    print(theme.hr("bar", _TABLE_WIDTH))
 
 
 def pretty_print_device(device: Dict[str, Union[str, int]], detailed: bool = True) -> None:
@@ -86,22 +91,27 @@ def pretty_print_device(device: Dict[str, Union[str, int]], detailed: bool = Tru
     state_col = _colorize_state(str(device["state"]))
 
     if detailed:
-        print(f"{BOLD}[{device['index']}] {device['serial']} ({device['type']} Device){RESET}")
+        serial = theme.style("fg.emphasis")(str(device["serial"]))
+        badge = _type_badge(str(device["type"]))
+        ip = theme.style("fg.muted")(str(device["ip"]))
+        print(theme.style("fg.accent", "bold")(f"[{device['index']}] {serial} {badge}"))
         print(f"    Vendor   : {device['vendor']}")
         print(f"    Model    : {device['model']}")
         print(f"    State    : {state_col}")
-        print(f"    IP Addr  : {device['ip']}")
+        print(f"    IP Addr  : {ip}")
         print()
     else:
         index_str = f"[{device['index']}]"
-        # The colored state text needs padding calculated from the plain value
+        serial = theme.style("fg.emphasis")(str(device["serial"]))
+        badge = _type_badge(str(device["type"]))
+        ip = theme.style("fg.muted")(str(device["ip"]))
         state_plain = str(device["state"])
         padding = " " * (STATE_W - len(state_plain))
         state_field = f"{state_col}{padding}"
         line = (
             f"{index_str:<{IDX_W}} │ "
             f"{device['vendor']:<{VENDOR_W}} │ {device['model']:<{MODEL_W}} │ "
-            f"{device['serial']:<{SERIAL_W}} │ {device['type']:<{TYPE_W}} │ "
-            f"{state_field} │ {device['ip']:<{IP_W}}"
+            f"{serial:<{SERIAL_W}} │ {badge:<{TYPE_W}} │ "
+            f"{state_field} │ {ip:<{IP_W}}"
         )
         print(line)
