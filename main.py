@@ -63,9 +63,21 @@ def main():
         help="Color theme to use (overrides config default)",
     )
     parser.add_argument(
+        "--debug",
         "--verbose",
+        dest="debug",
         action="store_true",
         help="Enable debug logging to console",
+    )
+    parser.add_argument(
+        "--artifacts",
+        default="3",
+        help="Number of artifacts per package to display, or 'all'",
+    )
+    parser.add_argument(
+        "--no-artifacts",
+        action="store_true",
+        help="Suppress artifact display in analysis output",
     )
     args = parser.parse_args()
 
@@ -78,8 +90,8 @@ def main():
         except Exception as e:
             log.warning(f"Failed to set theme '{selected_palette}': {e}")
 
-    # Optional verbose console logging (only if supported by logging engine)
-    if args.verbose:
+    # Optional debug console logging (only if supported by logging engine)
+    if args.debug:
         if hasattr(log, "set_console_level"):
             try:
                 log.set_console_level(logging.DEBUG)
@@ -89,7 +101,15 @@ def main():
                     log.set_console_level("DEBUG")  # type: ignore[arg-type]
                 except Exception:
                     pass
-        log.info("Verbose console logging enabled")
+        log.info("Debug console logging enabled")
+
+    # Configure artifact display limit
+    artifact_arg = getattr(args, "artifacts", "3")
+    if args.no_artifacts:
+        limit: int | None = 0
+    else:
+        limit = None if str(artifact_arg).lower() == "all" else int(artifact_arg)
+    setattr(app_config, "ARTIFACT_LIMIT", limit)
 
     # Trap Ctrl+C
     signal.signal(signal.SIGINT, handle_interrupt)

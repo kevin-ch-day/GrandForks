@@ -22,6 +22,8 @@ class LoggingCore:
         # configure root logger
         self.logger = logging.getLogger()
         self.logger.setLevel(logging.DEBUG)
+        # avoid duplicate handlers if re-initialized
+        self.logger.handlers.clear()
 
         # formatter for logs
         formatter = logging.Formatter(

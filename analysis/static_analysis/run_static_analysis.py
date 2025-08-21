@@ -1,56 +1,18 @@
-from collections import Counter
-
-from . import package_analysis, apk_analysis
+from . import package_analysis, apk_analysis, report_formatter
 import utils.logging_utils.logging_engine as log
+from config import app_config
 
 
-def analyze_device(serial: str) -> None:
+def analyze_device(serial: str, artifact_limit: int | None = None) -> None:
     """Run static analysis against connected device packages."""
 
     log.info(f"Starting static analysis for device {serial}")
 
+    if artifact_limit is None:
+        artifact_limit = getattr(app_config, "ARTIFACT_LIMIT", 3)
+
     reports = package_analysis.analyze_packages(serial)
-    if not reports:
-        print(f"\n⚠️  No packages found on {serial}.")
-        return
-
-    print(f"\n📦 Installed Packages on {serial}")
-    print("----------------------------------")
-    for rep in reports[:20]:
-        risk_marker = "!" if rep.risk_score else ""
-        print(f" - {rep.name} [{rep.category}] {risk_marker}")
-        for perm in rep.dangerous_permissions[:5]:
-            print(f"     ⚠ {perm}")
-        if len(rep.dangerous_permissions) > 5:
-            print("     ...")
-        for art in rep.artifacts[:3]:
-            print(f"     🔑 {art}")
-        if len(rep.artifacts) > 3:
-            print("     ...")
-
-    flagged = [r for r in reports if r.risk_score]
-    category_counts = Counter(r.category for r in reports)
-
-    print("\nSummary")
-    print("-------")
-    print(f"Total packages: {len(reports)}")
-    print(f"Flagged apps : {len(flagged)}")
-    for cat, count in category_counts.items():
-        print(f" - {cat}: {count}")
-
-    if flagged:
-        print("\nFlagged applications:")
-        for rep in flagged:
-            perms = ", ".join(rep.dangerous_permissions)
-            print(
-                f" - {rep.name} [{rep.category}] risk={rep.risk_score} :: {perms}"
-            )
-            if rep.artifacts:
-                arts = ", ".join(rep.artifacts[:3])
-                print(f"     artifacts: {arts}")
-
-    print()
-    log.info(f"Static analysis complete for {serial}")
+    report_formatter.print_reports(reports, serial, artifact_limit)
 
 
 def analyze_apk_driver(apk_path: str):
