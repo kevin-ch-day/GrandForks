@@ -1,6 +1,8 @@
 # main.py
 import sys
 import signal
+import argparse
+import logging
 
 from config import app_config
 from utils.display_utils import menu_utils, error_utils
@@ -52,6 +54,17 @@ def handle_interrupt(sig, frame):
 
 def main():
     """Main entry point for the Android Tool CLI."""
+    parser = argparse.ArgumentParser(description="Android Tool CLI")
+    parser.add_argument(
+        "--verbose",
+        action="store_true",
+        help="Enable debug logging to console",
+    )
+    args = parser.parse_args()
+
+    if args.verbose:
+        log.set_console_level(logging.DEBUG)
+
     # Trap Ctrl+C
     signal.signal(signal.SIGINT, handle_interrupt)
 
