@@ -5,31 +5,8 @@ from typing import Dict, Iterable, List, Optional, Tuple
 
 import utils.logging_utils.logging_engine as log
 from utils.adb_utils.adb_runner import run_adb_command
-
-# Hardcoded mappings for known applications and their categories. These
-# can be moved to an external config or database in the future.
-KNOWN_APPS = {
-    "com.facebook.katana": "Social Media",
-    "com.instagram.android": "Social Media",
-    "com.snapchat.android": "Social Media",
-    "com.twitter.android": "Social Media",
-    "com.tiktok.android": "Social Media",
-    "com.whatsapp": "Messaging",
-    "com.facebook.orca": "Messaging",
-    "org.telegram.messenger": "Messaging",
-    "com.bankofamerica.mobilebanking": "Financial",
-    "com.chase.sig.android": "Financial",
-}
-
-# Watchlist of dangerous permissions. If an application requests any of
-# these, it will be flagged in the report and contribute to its risk
-# score.
-SENSITIVE_PERMISSIONS = {
-    "android.permission.RECORD_AUDIO",
-    "android.permission.READ_SMS",
-    "android.permission.ACCESS_FINE_LOCATION",
-    "android.permission.SYSTEM_ALERT_WINDOW",
-}
+from analysis.static_analysis.app_categories import get_category
+from analysis.static_analysis.permission_watchlist import SENSITIVE_PERMISSIONS
 
 
 @dataclass
@@ -41,6 +18,7 @@ class PackageReport:
     permissions: List[str]
     dangerous_permissions: List[str]
     risk_score: int
+    apk_hash: Optional[str] = None
 
 
 def get_all_package_permissions(serial: str) -> Dict[str, List[str]]:
@@ -152,6 +130,35 @@ def verify_package_apks(
     return valid, missing
 
 
+def compute_apk_hashes(
+    serial: str, apk_map: Dict[str, str], progress_every: int = 25
+) -> Dict[str, str]:
+    """Compute SHA-256 hashes for APKs in ``apk_map``."""
+
+    total = len(apk_map)
+    log.info(f"Computing hashes for {total} packages")
+
+    hashes: Dict[str, str] = {}
+    for idx, (pkg, path) in enumerate(apk_map.items(), start=1):
+        result = run_adb_command(serial, ["shell", "sha256sum", path])
+        if result.get("success", False):
+            output: Optional[str] = result.get("output")
+            if isinstance(output, str) and output:
+                hashes[pkg] = output.split()[0]
+                log.debug(f"Hash for {pkg}: {hashes[pkg]}")
+            else:
+                log.warning(f"No hash output for {pkg}")
+        else:
+            log.warning(
+                f"Failed to hash {pkg} :: {result.get('error', 'no error provided')}"
+            )
+
+        if idx % progress_every == 0 or idx == total:
+            log.info(f"Hashed {idx}/{total} packages")
+
+    return hashes
+
+
 def analyze_packages(serial: str) -> List[PackageReport]:
     """Gather package, permission, and risk information for ``serial``.
 
@@ -169,6 +176,8 @@ def analyze_packages(serial: str) -> List[PackageReport]:
     if missing:
         log.info(f"Skipping {len(missing)} packages without APKs")
 
+    hashes = compute_apk_hashes(serial, verified_apks)
+
     packages = list(verified_apks.keys())
     total = len(packages)
     reports: List[PackageReport] = []
@@ -179,9 +188,10 @@ def analyze_packages(serial: str) -> List[PackageReport]:
         perms = perms_map.get(pkg, [])
         dangerous = [p for p in perms if p in SENSITIVE_PERMISSIONS]
         risk = len(dangerous)
-        category = KNOWN_APPS.get(pkg, "Other")
+        category = get_category(pkg)
+        apk_hash = hashes.get(pkg)
         log.debug(
-            f"Package {pkg}: category={category}, risk={risk}, dangerous={dangerous}"
+            f"Package {pkg}: category={category}, risk={risk}, dangerous={dangerous}, hash={apk_hash}"
         )
         reports.append(
             PackageReport(
@@ -190,6 +200,7 @@ def analyze_packages(serial: str) -> List[PackageReport]:
                 permissions=perms,
                 dangerous_permissions=dangerous,
                 risk_score=risk,
+                apk_hash=apk_hash,
             )
         )
 
