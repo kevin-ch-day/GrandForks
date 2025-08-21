@@ -5,3 +5,4 @@ logs/
 # Python bytecode
 *.pyc
 __pycache__/
+logs/android_tool.log
