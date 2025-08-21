@@ -13,7 +13,11 @@ from utils.about_app import about_app
 def action_show_connected_devices():
     """Action: List all connected Android devices."""
     log.info("Selected: Show Connected Devices")
-    show_devices.display_detailed_devices()
+    try:
+        show_devices.display_detailed_devices()
+    except KeyboardInterrupt:
+        print("\n⚠️  Device listing interrupted.\n")
+        log.warning("Device listing interrupted by user")
 
 
 def action_connect_to_device():
@@ -21,6 +25,9 @@ def action_connect_to_device():
     log.info("Selected: Connect to a Device")
     try:
         connect_to_device.connect_to_device()
+    except KeyboardInterrupt:
+        print("\n⚠️  Device connection interrupted. Returning to main menu.\n")
+        log.warning("Device connection interrupted by user")
     except Exception as e:
         error_utils.show_error(f"Failed to connect to device: {e}")
 
@@ -56,11 +63,15 @@ def main():
         "4": ("About App", about_app),
     }
 
-    menu_utils.show_menu(
-        title=f"{app_config.APP_NAME} v{app_config.APP_VERSION}",
-        options=options,
-        exit_label="Exit"
-    )
+    try:
+        menu_utils.show_menu(
+            title=f"{app_config.APP_NAME} v{app_config.APP_VERSION}",
+            options=options,
+            exit_label="Exit"
+        )
+    except KeyboardInterrupt:
+        print("\n⚠️  Main menu interrupted. Exiting.\n")
+        log.warning("Main menu interrupted by user")
 
     log.info("Application exited cleanly")
 
