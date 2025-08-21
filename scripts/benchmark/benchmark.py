@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import sys
 from pathlib import Path
-from typing import Dict
+from typing import Dict, List
 
 # Ensure repository root is on the import path
 sys.path.append(str(Path(__file__).resolve().parents[2]))
@@ -47,7 +47,8 @@ def main() -> None:
     with REFERENCE_APPS.open() as fh:
         apps = json.load(fh)
 
-    diff_lines = []
+    diff_lines: List[str] = []
+    results: List[Dict[str, object]] = []
     for app in apps:
         name = app["name"]
         log.info(f"Processing {name}")
@@ -58,12 +59,18 @@ def main() -> None:
         (OUTPUT_DIR / f"{name}_type_b.json").write_text(json.dumps(b_features, indent=2))
 
         diff = diff_features(a_features, b_features)
+        results.append({"name": name, "diff": diff})
         if diff:
             diff_lines.append(f"{name}: {json.dumps(diff)}")
 
     diff_path = OUTPUT_DIR / "diff.log"
     diff_path.write_text("\n".join(diff_lines) if diff_lines else "No mismatches detected.\n")
-    log.info(f"Benchmark complete. Diff report written to {diff_path}")
+
+    report_path = OUTPUT_DIR / "report.json"
+    report_path.write_text(json.dumps({"apps": results}, indent=2))
+    log.info(
+        f"Benchmark complete. Diff report written to {diff_path} and JSON report to {report_path}"
+    )
 
 
 if __name__ == "__main__":
