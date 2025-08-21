@@ -1,27 +1,48 @@
+from collections import Counter
+
 from . import package_analysis, apk_analysis
 import utils.logging_utils.logging_engine as log
 
 
 def analyze_device(serial: str) -> None:
     """Run static analysis against connected device packages."""
+
     log.info(f"Starting static analysis for device {serial}")
 
-    packages = package_analysis.list_installed_packages(serial)
-    if not packages:
+    reports = package_analysis.analyze_packages(serial)
+    if not reports:
         print(f"\n⚠️  No packages found on {serial}.")
         return
 
     print(f"\n📦 Installed Packages on {serial}")
     print("----------------------------------")
-    for pkg in packages[:20]:
-        perms = package_analysis.get_package_permissions(serial, pkg)
-        print(f" - {pkg}")
-        for p in perms[:5]:
-            print(f"     ↳ {p}")
-        if len(perms) > 5:
+    for rep in reports[:20]:
+        risk_marker = "!" if rep.risk_score else ""
+        print(f" - {rep.name} [{rep.category}] {risk_marker}")
+        for perm in rep.dangerous_permissions[:5]:
+            print(f"     ⚠ {perm}")
+        if len(rep.dangerous_permissions) > 5:
             print("     ...")
 
-    print(f"\nTotal packages: {len(packages)} (showing first 20)\n")
+    flagged = [r for r in reports if r.risk_score]
+    category_counts = Counter(r.category for r in reports)
+
+    print("\nSummary")
+    print("-------")
+    print(f"Total packages: {len(reports)}")
+    print(f"Flagged apps : {len(flagged)}")
+    for cat, count in category_counts.items():
+        print(f" - {cat}: {count}")
+
+    if flagged:
+        print("\nFlagged applications:")
+        for rep in flagged:
+            perms = ", ".join(rep.dangerous_permissions)
+            print(
+                f" - {rep.name} [{rep.category}] risk={rep.risk_score} :: {perms}"
+            )
+
+    print()
     log.info(f"Static analysis complete for {serial}")
 
 
