@@ -5,7 +5,13 @@ from pathlib import Path
 
 
 class LoggingCore:
-    def __init__(self, log_name="android_tool", log_dir="logs", level=logging.INFO):
+    def __init__(self, log_name: str = "android_tool", log_dir: str = "logs"):
+        """Configure application-wide logging.
+
+        A root logger is created at DEBUG level. Console output defaults to
+        INFO while the log file captures DEBUG and above.
+        """
+
         # ensure logs directory exists
         self.log_dir = Path(log_dir)
         self.log_dir.mkdir(parents=True, exist_ok=True)
@@ -13,9 +19,9 @@ class LoggingCore:
         # file path for logs
         log_file = self.log_dir / f"{log_name}.log"
 
-        # create logger
-        self.logger = logging.getLogger(log_name)
-        self.logger.setLevel(level)
+        # configure root logger
+        self.logger = logging.getLogger()
+        self.logger.setLevel(logging.DEBUG)
 
         # formatter for logs
         formatter = logging.Formatter(
@@ -23,15 +29,22 @@ class LoggingCore:
             "%Y-%m-%d %H:%M:%S",
         )
 
-        # console handler
-        console_handler = logging.StreamHandler()
-        console_handler.setFormatter(formatter)
-        self.logger.addHandler(console_handler)
+        # console handler at INFO by default
+        self.console_handler = logging.StreamHandler()
+        self.console_handler.setLevel(logging.INFO)
+        self.console_handler.setFormatter(formatter)
+        self.logger.addHandler(self.console_handler)
 
-        # file handler
+        # file handler captures DEBUG messages
         file_handler = logging.FileHandler(log_file, encoding="utf-8")
+        file_handler.setLevel(logging.DEBUG)
         file_handler.setFormatter(formatter)
         self.logger.addHandler(file_handler)
+
+    def set_console_level(self, level: int) -> None:
+        """Adjust the console handler log level."""
+
+        self.console_handler.setLevel(level)
 
     def get_logger(self):
         # return the logger instance

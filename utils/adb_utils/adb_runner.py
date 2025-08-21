@@ -30,7 +30,7 @@ def execute_command(
             "error": str (error message if failed)
         }
     """
-    log.info(f"[EXECUTE] Running command: {' '.join(cmd)}")
+    log.debug(f"[EXECUTE] Running command: {' '.join(cmd)}")
 
     try:
         result = subprocess.run(

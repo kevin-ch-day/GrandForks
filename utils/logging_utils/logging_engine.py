@@ -31,3 +31,9 @@ def debug(message: str):
 def critical(message: str):
     # log critical issues
     _logger.critical(message)
+
+
+def set_console_level(level: int) -> None:
+    """Expose ability to tweak console log level at runtime."""
+
+    _core.set_console_level(level)
