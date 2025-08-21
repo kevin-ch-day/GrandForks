@@ -7,6 +7,7 @@ from utils.adb_utils import adb_ip_lookup
 from utils.adb_utils.adb_devices import DeviceInfo
 from device import vendor_normalizer
 from utils.display_utils import prompt_utils, menu_utils
+from utils.display_utils.menu_utils import MenuExit
 from analysis.static_analysis import run_static_analysis   # <-- import
 import utils.logging_utils.logging_engine as log
 
@@ -65,8 +66,7 @@ def interactive_device_menu(device: DeviceInfo):
         if prompt_utils.ask_yes_no(f"Disconnect from {serial}?", default="y"):
             print(f"\n🔌 Disconnected from {serial}")
             log.info(f"Disconnected from {serial}")
-            return True
-        return False
+            raise MenuExit
 
     def reboot():
         if prompt_utils.ask_yes_no(f"Reboot {serial}?", default="y"):
@@ -89,9 +89,5 @@ def interactive_device_menu(device: DeviceInfo):
         "6": ("Exit program", exit_program),
     }
 
-    while True:
-        choice = menu_utils.show_menu("Device Menu", options, exit_label="Back")
-        log.debug(f"Menu choice {choice} selected for device {serial}")
-        if choice == "4" and disconnect():
-            break
+    menu_utils.show_menu("Device Menu", options, exit_label="Back")
     log.info(f"Exiting device menu for {serial}")

@@ -5,6 +5,12 @@ from typing import Callable, Dict, Tuple, List, Optional
 from utils.display_utils import prompt_utils, error_utils
 import utils.logging_utils.logging_engine as log
 
+
+class MenuExit(Exception):
+    """Signal that the current menu should exit early."""
+    pass
+
+
 try:
     from colorama import Fore, Style, init as colorama_init
     colorama_init(autoreset=True)
@@ -76,7 +82,10 @@ def show_menu(
             break
 
         label, action = options[choice]
-        run_menu_action(label, action)
+        try:
+            run_menu_action(label, action)
+        except MenuExit:
+            break
 
 
 # ---------- Action Helpers ----------
@@ -89,6 +98,8 @@ def run_menu_action(label: str, action: Callable) -> None:
     except KeyboardInterrupt:
         print("\n⚠️  Action interrupted by user.\n")
         log.warning(f"Action '{label}' interrupted by user")
+    except MenuExit:
+        raise
     except Exception as e:
         error_utils.handle_error(f"Error while running '{label}': {e}", exc=e)
 
