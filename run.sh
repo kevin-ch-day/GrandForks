@@ -1,7 +1,5 @@
 #!/usr/bin/env bash
 # run.sh - launcher for Android Tool
 
-# run Python app, handle Ctrl+C gracefully
-trap 'echo -e "\n\n⚠️  Interrupted. Exiting..."; exit 130' INT
-
+# Run the Python application; allow Ctrl+C to be handled by Python
 python3 main.py

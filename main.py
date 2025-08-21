@@ -36,9 +36,9 @@ def action_database_menu():
 
 def handle_interrupt(sig, frame):
     """Gracefully handle Ctrl+C interrupts."""
-    print("\n\n⚠️  Interrupted by user. Exiting...")
+    print("\n\n⚠️  Interrupted by user.")
     log.warning("Application interrupted with Ctrl+C")
-    sys.exit(0)
+    raise KeyboardInterrupt
 
 
 # ---------- Main Entry ----------
