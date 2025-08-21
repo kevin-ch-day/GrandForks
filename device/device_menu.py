@@ -9,6 +9,7 @@ from device import vendor_normalizer
 from utils.display_utils import prompt_utils, menu_utils
 from utils.display_utils.menu_utils import MenuExit
 from analysis.static_analysis import run_static_analysis   # <-- import
+from config import app_config
 import utils.logging_utils.logging_engine as log
 
 
@@ -53,7 +54,8 @@ def interactive_device_menu(device: DeviceInfo):
         print("\n🔍 Running static analysis...\n")
         try:
             log.info(f"Launching static analysis for {serial}")
-            run_static_analysis.analyze_device(serial)   # <-- call into analysis
+            limit = getattr(app_config, "ARTIFACT_LIMIT", 3)
+            run_static_analysis.analyze_device(serial, artifact_limit=limit)
             log.info(f"Static analysis finished for {serial}")
         except KeyboardInterrupt:
             print("\n⚠️  Static analysis interrupted. Returning to menu.\n")

@@ -44,7 +44,8 @@ def execute_command(
             timeout=timeout,
         )
         output = result.stdout.strip()
-        log.debug(f"[EXECUTE] Output: {output[:200]}...")
+        snippet = output if len(output) <= 200 else f"{output[:200]}..."
+        log.debug(f"[EXECUTE] Output: {snippet}")
         return {"success": True, "output": output, "error": ""}
 
     except subprocess.TimeoutExpired:

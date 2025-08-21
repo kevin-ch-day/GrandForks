@@ -150,7 +150,7 @@ def verify_package_apks(
             log.debug(f"APK for {pkg} located at {path}")
         else:
             missing.append(pkg)
-            if _is_verbose():
+            if _is_verbose_enabled():
                 log.warning(f"No APK path found for {pkg}")
         ticker.update(idx)
 
@@ -236,13 +236,13 @@ def analyze_packages(serial: str) -> List[PackageReport]:
     )
 
     if string_finder:
-        verbose = _is_verbose()
-        string_finder.print_failure_summary(verbose=verbose)
+        verbose = _is_verbose_enabled()
+        string_finder.print_failure_summary(debug=verbose)
 
     return reports
 
 
-def _is_verbose() -> bool:
+def _is_verbose_enabled() -> bool:
     """Check if console logging is at DEBUG level."""
 
     logger = logging.getLogger()

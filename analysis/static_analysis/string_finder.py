@@ -137,19 +137,19 @@ def find_artifacts(serial: str, package: str) -> List[str]:
     return sorted(artifacts)
 
 
-def print_failure_summary(verbose: bool = False) -> None:
+def print_failure_summary(debug: bool = False) -> None:
     """Print and reset collected failure information."""
 
     if not _failure_counts:
         return
 
-    print("\nFailure Summary")
-    print("---------------")
+    log.info("\nFailure Summary")
+    log.info("---------------")
     for reason, count in _failure_counts.items():
-        print(f" - {reason}: {count}")
-    if verbose and _failure_details:
+        log.info(f" - {reason}: {count}")
+    if debug and _failure_details:
         for detail in _failure_details:
-            print(f"   {detail}")
+            log.debug(f"   {detail}")
 
     _failure_counts.clear()
     _failure_details.clear()
