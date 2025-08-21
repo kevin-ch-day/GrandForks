@@ -1,0 +1,14 @@
+[
+  {
+    "name": "OpenCamera",
+    "apk_path_a": "scripts/benchmark/reference_apks/opencamera_fdroid.apk",
+    "apk_path_b": "scripts/benchmark/reference_apks/opencamera_play.apk",
+    "description": "F-Droid build vs Play Store build with different packaging and signing" 
+  },
+  {
+    "name": "OsmAnd",
+    "apk_path_a": "scripts/benchmark/reference_apks/osmand_arm.apk",
+    "apk_path_b": "scripts/benchmark/reference_apks/osmand_x86.apk",
+    "description": "ABI-specific packages for ARM vs x86 architectures" 
+  }
+]
