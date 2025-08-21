@@ -8,11 +8,18 @@ from . import theme
 
 
 def _print_block(title: str, icon: str, message: str, key: str) -> None:
-    """Internal helper to render a styled message block."""
-    styled_title = theme.style(f"fg.{key}")(title)
+    """Internal helper to render a styled message block.
+
+    Titles and message bodies are wrapped with theme colors and bold styles
+    to provide stronger emphasis that adapts to the active palette.
+    """
+
+    styled_title = theme.style(f"fg.{key}", "bold")(title)
+    styled_message = theme.style(f"fg.{key}", "bold")(message)
+
     print(f"\n{icon} {styled_title}")
     print("-" * (len(title) + 4))
-    print(message)
+    print(styled_message)
     print("-" * (len(title) + 4) + "\n")
 
 
