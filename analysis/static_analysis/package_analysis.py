@@ -2,6 +2,7 @@
 
 from dataclasses import dataclass
 from typing import List, Optional, cast
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import utils.logging_utils.logging_engine as log
 from utils.adb_utils.adb_runner import run_adb_command
@@ -80,7 +81,7 @@ def _parse_permissions(dumpsys_output: str) -> List[str]:
 def get_package_permissions(serial: str, package: str) -> List[str]:
     """Return a list of declared permissions for ``package`` on the device."""
 
-    log.info(f"Fetching permissions for {package} on {serial}")
+    log.debug(f"Fetching permissions for {package} on {serial}")
     result = run_adb_command(serial, ["shell", "dumpsys", "package", package])
 
     if not result.get("success", False):
@@ -108,9 +109,11 @@ def analyze_packages(serial: str) -> List[PackageReport]:
     """
 
     packages = list_installed_packages(serial)
+    total = len(packages)
     reports: List[PackageReport] = []
+    log.info(f"Analyzing {total} packages on {serial}")
 
-    for pkg in packages:
+    def _process(pkg: str) -> PackageReport:
         perms = get_package_permissions(serial, pkg)
         dangerous = [p for p in perms if p in SENSITIVE_PERMISSIONS]
         risk = len(dangerous)
@@ -118,15 +121,24 @@ def analyze_packages(serial: str) -> List[PackageReport]:
         log.debug(
             f"Package {pkg}: category={category}, risk={risk}, dangerous={dangerous}"
         )
-        reports.append(
-            PackageReport(
-                name=pkg,
-                category=category,
-                permissions=perms,
-                dangerous_permissions=dangerous,
-                risk_score=risk,
-            )
+        return PackageReport(
+            name=pkg,
+            category=category,
+            permissions=perms,
+            dangerous_permissions=dangerous,
+            risk_score=risk,
         )
+
+    with ThreadPoolExecutor() as executor:
+        future_to_pkg = {executor.submit(_process, pkg): pkg for pkg in packages}
+        for idx, future in enumerate(as_completed(future_to_pkg), start=1):
+            pkg = future_to_pkg[future]
+            try:
+                report = future.result()
+                reports.append(report)
+            except Exception as exc:
+                log.warning(f"Failed to analyze {pkg}: {exc}")
+            log.info(f"Processed {idx}/{total} packages")
 
     flagged = sum(1 for r in reports if r.risk_score)
     log.info(
