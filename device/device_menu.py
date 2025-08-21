@@ -54,6 +54,9 @@ def interactive_device_menu(device: DeviceInfo):
             log.info(f"Launching static analysis for {serial}")
             run_static_analysis.analyze_device(serial)   # <-- call into analysis
             log.info(f"Static analysis finished for {serial}")
+        except KeyboardInterrupt:
+            print("\n⚠️  Static analysis interrupted. Returning to menu.\n")
+            log.warning(f"Static analysis interrupted for {serial}")
         except Exception as e:
             print(f"❌ Static analysis failed: {e}")
             log.error(f"Static analysis failed for {serial}: {e}")
