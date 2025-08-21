@@ -3,6 +3,7 @@
 import sys
 from typing import Callable, Dict, Tuple, List, Optional
 from utils.display_utils import prompt_utils, error_utils
+import utils.logging_utils.logging_engine as log
 
 try:
     from colorama import Fore, Style, init as colorama_init
@@ -85,6 +86,9 @@ def run_menu_action(label: str, action: Callable) -> None:
     try:
         print(f"\n▶ Running: {label}\n")
         action()
+    except KeyboardInterrupt:
+        print("\n⚠️  Action interrupted by user.\n")
+        log.warning(f"Action '{label}' interrupted by user")
     except Exception as e:
         error_utils.handle_error(f"Error while running '{label}': {e}", exc=e)
 
