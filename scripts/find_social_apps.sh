@@ -14,9 +14,10 @@ usage() {
   cat <<'EOF'
 Usage: find_social_apps.sh [options]
 
-Connection:
-  --serial SERIAL           Use specific adb serial (from `adb devices`).
-  --ip HOST[:PORT]          Connect over TCP/IP (device must be in tcpip mode).
+  Connection:
+    --serial SERIAL           Use specific adb serial (from `adb devices`).
+    --ip HOST[:PORT]          Connect over TCP/IP (device must be in tcpip mode).
+                              If neither option is given, the first device from `adb devices -l` is used automatically.
 
 Scope:
   --all-users               Scan all Android users (default).

@@ -69,31 +69,13 @@ aaf_adb_cmd() {
 }
 
 aaf_select_device() {
-  # Prompt the operator to choose a device when multiple are attached.
-  local devs=( )
-  mapfile -t devs < <(adb devices -l | awk 'NR>1 && $1!="" {print $1}') || true
-  local count=${#devs[@]}
-  if [[ $count -eq 0 ]]; then
+  # Automatically select the first device returned by "adb devices -l".
+  local first
+  first="$(adb devices -l | awk 'NR>1 && $1!="" {print $1; exit}')"
+  if [[ -z "$first" ]]; then
     aaf_die "No ADB devices. Plug in a phone and run: adb devices"
-  elif [[ $count -eq 1 ]]; then
-    SERIAL="${devs[0]}"
-    return
   fi
-
-  aaf_log INFO "Select a device to scan:" 
-  local i=1
-  for d in "${devs[@]}"; do
-    local model
-    model="$(adb -s "$d" shell getprop ro.product.model 2>/dev/null | tr -d '\r')"
-    printf ' %d) %s (%s)\n' "$i" "$d" "$model" 1>&2
-    ((i++))
-  done
-  local choice
-  read -rp "Enter choice [1-${count}]: " choice
-  if ! [[ "$choice" =~ ^[0-9]+$ ]] || (( choice < 1 || choice > count )); then
-    aaf_die "Invalid selection"
-  fi
-  SERIAL="${devs[$((choice-1))]}"
+  SERIAL="$first"
 }
 
 aaf_get_state() { eval "$1 get-state 2>/dev/null || true"; }
