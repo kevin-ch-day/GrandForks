@@ -1,4 +1,7 @@
 # utils/adb_utils/adb_runner.py
+"""ADB command helper utilities."""
+
+import shutil
 import subprocess
 from typing import Optional, List, Dict, Union
 import utils.logging_utils.logging_engine as log
@@ -62,6 +65,14 @@ def execute_command(
         return {"success": False, "output": "", "error": msg}
 
 
+def is_adb_available() -> bool:
+    """Check if adb is available in PATH."""
+    if shutil.which("adb"):
+        return True
+    log.error("adb not found in PATH")
+    return False
+
+
 def run_adb_command(
     serial: Optional[str], args: List[str], timeout: int = 15, capture_stderr: bool = False
 ) -> Dict[str, Union[bool, str]]:
@@ -70,5 +81,8 @@ def run_adb_command(
 
     Returns a dict with success, output, error.
     """
+    if not is_adb_available():
+        return {"success": False, "output": "", "error": "adb not found"}
+
     cmd = build_adb_command(serial, args)
     return execute_command(cmd, timeout=timeout, capture_stderr=capture_stderr)
