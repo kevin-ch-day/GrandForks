@@ -23,7 +23,16 @@ class PackageAnalysisTests(unittest.TestCase):
         def fake_run_adb_command(serial, cmd):
             if cmd == ["shell", "dumpsys", "package"]:
                 return {"success": True, "output": dumpsys_output}
-            if cmd == ["shell", "pm", "list", "packages", "-f"]:
+            if cmd == [
+                "shell",
+                "pm",
+                "list",
+                "packages",
+                "-f",
+                "-u",
+                "--user",
+                "0",
+            ]:
                 return {"success": True, "output": pm_list_output}
             if len(cmd) == 3 and cmd[0] == "shell" and cmd[1] == "sha256sum":
                 path = cmd[2]

@@ -18,7 +18,10 @@ def build_adb_command(serial: Optional[str], args: List[str]) -> List[str]:
 
 
 def execute_command(
-    cmd: List[str], timeout: int = 15, capture_stderr: bool = False
+    cmd: List[str],
+    timeout: int = 15,
+    capture_stderr: bool = False,
+    log_errors: bool = True,
 ) -> Dict[str, Union[bool, str]]:
     """
     Execute a shell command with error handling and logging.
@@ -46,13 +49,15 @@ def execute_command(
 
     except subprocess.TimeoutExpired:
         msg = f"Command timed out after {timeout}s: {' '.join(cmd)}"
-        log.error(msg)
+        if log_errors:
+            log.error(msg)
         return {"success": False, "output": "", "error": msg}
 
     except subprocess.CalledProcessError as e:
         err_msg = e.stderr.strip() if e.stderr else str(e)
         msg = f"Command failed: {' '.join(cmd)} :: {err_msg}"
-        log.error(msg)
+        if log_errors:
+            log.error(msg)
         return {
             "success": False,
             "output": e.stderr.strip() if capture_stderr else "",
@@ -61,28 +66,39 @@ def execute_command(
 
     except FileNotFoundError:
         msg = f"Command not found: {cmd[0]}"
-        log.error(msg)
+        if log_errors:
+            log.error(msg)
         return {"success": False, "output": "", "error": msg}
 
 
-def is_adb_available() -> bool:
+def is_adb_available(log_errors: bool = True) -> bool:
     """Check if adb is available in PATH."""
     if shutil.which("adb"):
         return True
-    log.error("adb not found in PATH")
+    if log_errors:
+        log.error("adb not found in PATH")
     return False
 
 
 def run_adb_command(
-    serial: Optional[str], args: List[str], timeout: int = 15, capture_stderr: bool = False
+    serial: Optional[str],
+    args: List[str],
+    timeout: int = 15,
+    capture_stderr: bool = False,
+    log_errors: bool = True,
 ) -> Dict[str, Union[bool, str]]:
     """
     Run an adb command for a specific device.
 
     Returns a dict with success, output, error.
     """
-    if not is_adb_available():
+    if not is_adb_available(log_errors=log_errors):
         return {"success": False, "output": "", "error": "adb not found"}
 
     cmd = build_adb_command(serial, args)
-    return execute_command(cmd, timeout=timeout, capture_stderr=capture_stderr)
+    return execute_command(
+        cmd,
+        timeout=timeout,
+        capture_stderr=capture_stderr,
+        log_errors=log_errors,
+    )
