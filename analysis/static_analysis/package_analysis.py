@@ -6,6 +6,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import utils.logging_utils.logging_engine as log
 from utils.adb_utils.adb_runner import run_adb_command
+from . import string_finder
 
 # Hardcoded mappings for known applications and their categories. These
 # can be moved to an external config or database in the future.
@@ -42,6 +43,7 @@ class PackageReport:
     permissions: List[str]
     dangerous_permissions: List[str]
     risk_score: int
+    artifacts: List[str]
 
 
 def list_installed_packages(serial: str) -> List[str]:
@@ -118,8 +120,9 @@ def analyze_packages(serial: str) -> List[PackageReport]:
         dangerous = [p for p in perms if p in SENSITIVE_PERMISSIONS]
         risk = len(dangerous)
         category = KNOWN_APPS.get(pkg, "Other")
+        artifacts = string_finder.find_artifacts(serial, pkg)
         log.debug(
-            f"Package {pkg}: category={category}, risk={risk}, dangerous={dangerous}"
+            f"Package {pkg}: category={category}, risk={risk}, dangerous={dangerous}, artifacts={len(artifacts)}"
         )
         return PackageReport(
             name=pkg,
@@ -127,6 +130,7 @@ def analyze_packages(serial: str) -> List[PackageReport]:
             permissions=perms,
             dangerous_permissions=dangerous,
             risk_score=risk,
+            artifacts=artifacts,
         )
 
     with ThreadPoolExecutor() as executor:
