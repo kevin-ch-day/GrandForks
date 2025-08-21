@@ -5,6 +5,7 @@ import subprocess
 
 from utils.adb_utils import adb_ip_lookup
 from utils.adb_utils.adb_devices import DeviceInfo
+from utils.adb_utils.adb_root import attempt_root
 from device import vendor_normalizer
 from utils.display_utils import prompt_utils, menu_utils
 from utils.display_utils.menu_utils import MenuExit
@@ -64,6 +65,12 @@ def interactive_device_menu(device: DeviceInfo):
             print(f"❌ Static analysis failed: {e}")
             log.error(f"Static analysis failed for {serial}: {e}")
 
+    def gain_root():
+        if prompt_utils.ask_yes_no(f"Attempt root access for {serial}?", default="n"):
+            success = attempt_root(serial)
+            msg = "Root access granted" if success else "Root access denied"
+            print(f"\n{msg} for {serial}")
+
     def disconnect():
         if prompt_utils.ask_yes_no(f"Disconnect from {serial}?", default="y"):
             print(f"\n🔌 Disconnected from {serial}")
@@ -85,10 +92,11 @@ def interactive_device_menu(device: DeviceInfo):
     options = {
         "1": ("Show device info", show_info),
         "2": ("Open adb shell", open_shell),
-        "3": ("Run static analysis", run_static),  # <-- new
-        "4": ("Disconnect", disconnect),
-        "5": ("Reboot device", reboot),
-        "6": ("Exit program", exit_program),
+        "3": ("Run static analysis", run_static),
+        "4": ("Gain root access", gain_root),
+        "5": ("Disconnect", disconnect),
+        "6": ("Reboot device", reboot),
+        "7": ("Exit program", exit_program),
     }
 
     menu_utils.show_menu("Device Menu", options, exit_label="Back")
