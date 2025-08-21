@@ -63,9 +63,9 @@ def main():
         help="Color theme to use (overrides config default)",
     )
     parser.add_argument(
-        "--debug",
         "--verbose",
-        dest="debug",
+        "--debug",
+        dest="verbose",
         action="store_true",
         help="Enable debug logging to console",
     )
@@ -91,7 +91,7 @@ def main():
             log.warning(f"Failed to set theme '{selected_palette}': {e}")
 
     # Optional debug console logging (only if supported by logging engine)
-    if args.debug:
+    if args.verbose:
         if hasattr(log, "set_console_level"):
             try:
                 log.set_console_level(logging.DEBUG)
