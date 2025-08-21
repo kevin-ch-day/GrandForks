@@ -34,3 +34,18 @@ def test_selected_option_emphasis(capsys):
     out = capsys.readouterr().out
     assert "Start" in out
     assert theme.color("fg.accent") in out
+
+
+def test_highlight_inverse_with_arrow(capsys):
+    menu_utils.print_menu_options({"1": ("Start", dummy)}, "Exit", highlight="1")
+    out = capsys.readouterr().out
+    assert "\x1b[7m" in out  # inverse video applied
+    assert "▶ [1] Start" in strip_ansi(out)
+
+
+def test_highlight_accent_style(capsys):
+    menu_utils.print_menu_options(
+        {"1": ("Start", dummy)}, "Exit", highlight="1", highlight_style="accent"
+    )
+    out = capsys.readouterr().out
+    assert theme.color("fg.accent") in out

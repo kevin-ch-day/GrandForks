@@ -5,6 +5,9 @@ from typing import Callable, Dict, Tuple, List, Optional
 from utils.display_utils import prompt_utils, error_utils, theme
 import utils.logging_utils.logging_engine as log
 
+INVERSE = "\x1b[7m"
+RESET = "\x1b[0m"
+
 
 class MenuExit(Exception):
     """Signal that the current menu should exit early."""
@@ -15,20 +18,47 @@ class MenuExit(Exception):
 
 def print_menu_header(title: str) -> None:
     """Render a styled header for the menu."""
-    print("\n" + theme.hr("bar", 50))
+    print("\n" + theme.hr("bar"))
     print(theme.header(title))
-    print(theme.hr("bar", 50))
+    print(theme.hr("bar"))
 
 
-def print_menu_options(options: Dict[str, Tuple[str, Callable]], exit_label: str) -> None:
-    """Render all menu options in sorted order."""
+def print_menu_options(
+    options: Dict[str, Tuple[str, Callable]],
+    exit_label: str,
+    highlight: Optional[str] = None,
+    highlight_style: str = "inverse",
+) -> None:
+    """Render all menu options in sorted order.
+
+    Args:
+        options: Mapping of option keys to (label, callable).
+        exit_label: Text for the exit option.
+        highlight: Option key to visually emphasize.
+        highlight_style: Style token for highlighting (inverse, bold, accent).
+    """
+    num_style = theme.style("fg.info", "bold")
+    exit_style = theme.style("fg.success", "bold")
+    styles = {
+        "inverse": lambda s: f"{INVERSE}{s}{RESET}",
+        "bold": theme.style("bold"),
+        "accent": theme.style("fg.accent", "bold"),
+    }
+    style_fn = styles.get(highlight_style, styles["inverse"])
     for key in sorted(options.keys(), key=lambda x: int(x)):
         label, _ = options[key]
-        hot = theme.style("fg.accent", "bold")(f"[{key}]")
-        print(f" {hot} {label}")
-    hot = theme.style("fg.accent", "bold")("[0]")
-    print(f" {hot} {exit_label}")
-    print(theme.hr("thin", 50))
+        hot = num_style(f"[{key}]")
+        if highlight == key:
+            line = f"{style_fn('▶')} {hot} {style_fn(label)}"
+        else:
+            line = f" {hot} {label}"
+        print(line)
+    hot = exit_style("[0]")
+    if highlight == "0":
+        line = f"{style_fn('▶')} {hot} {style_fn(exit_label)}"
+    else:
+        line = f" {hot} {exit_label}"
+    print(line)
 
 
 # ---------- Input Handling ----------
@@ -49,7 +79,9 @@ def show_menu(
     title: str,
     options: Dict[str, Tuple[str, Callable]],
     exit_label: str = "Exit",
-    default_choice: Optional[str] = None
+    default_choice: Optional[str] = None,
+    highlight_choice: Optional[str] = None,
+    highlight_style: str = "inverse",
 ) -> None:
     """
     A reusable interactive menu framework for CLI tools.
@@ -59,10 +91,14 @@ def show_menu(
         options (dict): Dict mapping string keys ("1", "2", ...) to (label, function).
         exit_label (str): Label for the exit/return option (default: "Exit").
         default_choice (str): If provided, auto-select this choice (useful for automation/tests).
+        highlight_choice (str): Option key to highlight when rendering the menu.
+        highlight_style (str): Style for highlighting ("inverse", "bold", or "accent").
     """
     while True:
         print_menu_header(title)
-        print_menu_options(options, exit_label)
+        print(theme.hr("thin"))
+        print_menu_options(options, exit_label, highlight_choice or default_choice, highlight_style)
+        print(theme.hr("thin"))
 
         choice = default_choice or _get_choice()
 
@@ -120,12 +156,15 @@ def simple_menu(title: str, items: List[str], exit_label: str = "Back") -> int:
     """
     while True:
         print_menu_header(title)
+        print(theme.hr("thin"))
+        num_style = theme.style("fg.info", "bold")
+        exit_style = theme.style("fg.success", "bold")
         for idx, item in enumerate(items, start=1):
-            hot = theme.style("fg.accent", "bold")(f"[{idx}]")
+            hot = num_style(f"[{idx}]")
             print(f" {hot} {item}")
-        hot = theme.style("fg.accent", "bold")("[0]")
+        hot = exit_style("[0]")
         print(f" {hot} {exit_label}")
-        print(theme.hr("thin", 50))
+        print(theme.hr("thin"))
 
         choice = _get_choice()
 
