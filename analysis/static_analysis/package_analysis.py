@@ -171,9 +171,26 @@ def compute_apk_hashes(
         result = run_adb_command(serial, ["shell", "sha256sum", path])
         if result.get("success", False):
             output: Optional[str] = result.get("output")
-            if isinstance(output, str) and output:
-                hashes[pkg] = output.split()[0]
-                log.debug(f"Hash for {pkg}: {hashes[pkg]}")
+            if isinstance(output, str):
+                try:
+                    parts = output.split()
+                    if len(parts) >= 2:
+                        hash_val, reported_path = parts[0], parts[1]
+                        if reported_path != path:
+                            log.warning(
+                                f"Hash output path mismatch for {pkg}: expected {path}, got {reported_path}"
+                            )
+                        else:
+                            hashes[pkg] = hash_val
+                            log.debug(f"Hash for {pkg}: {hash_val}")
+                    elif parts:
+                        log.warning(
+                            f"Malformed hash output for {pkg}: {output!r}"
+                        )
+                    else:
+                        log.warning(f"No hash output for {pkg}")
+                except Exception as exc:  # pragma: no cover - defensive
+                    log.warning(f"Failed to parse hash for {pkg} :: {exc}")
             else:
                 log.warning(f"No hash output for {pkg}")
         else:
