@@ -37,9 +37,8 @@ def action_connect_to_device():
 
 
 def action_database_menu():
-    """Action: Database menu placeholder."""
+    """Action: Open interactive database menu."""
     log.info("Opened Database Menu")
-    # Delegate to database menu placeholder
     db_menu()
 
 
