@@ -27,6 +27,8 @@ def analyze_apk(apk_path: str) -> Dict[str, str]:
         return {}
 
     metadata: Dict[str, str] = {}
+    permissions: list[str] = []
+
     for line in output.splitlines():
         if line.startswith("package:"):
             for part in line.split():
@@ -36,6 +38,10 @@ def analyze_apk(apk_path: str) -> Dict[str, str]:
         elif line.startswith("application-label:"):
             metadata["label"] = line.split(":", 1)[1].strip("'")
         elif line.startswith("uses-permission:"):
-            metadata.setdefault("permissions", "")
-            metadata["permissions"] += line.split(":", 1)[1].strip("'") + ", "
+            permissions.append(line.split(":", 1)[1].strip("'"))
+
+    if permissions:
+        metadata["permissions"] = ", ".join(permissions)
+
     return metadata
+

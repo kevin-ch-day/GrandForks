@@ -1,5 +1,6 @@
 """Placeholder dynamic analysis implementation."""
 
+import utils.logging_utils.logging_engine as log
 
 
 def run_dynamic_analysis(serial: str) -> None:
@@ -8,4 +9,7 @@ def run_dynamic_analysis(serial: str) -> None:
     Args:
         serial: The device serial identifier.
     """
-    print(f"Dynamic analysis not yet implemented for {serial}")
+    message = f"Dynamic analysis not yet implemented for {serial}"
+    log.warning(message)
+    print(message)
+
