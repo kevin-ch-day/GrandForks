@@ -37,41 +37,11 @@ KNOWN_APPS = {
 
 DEFAULT_CATEGORY = "Other"
 
-# Human-friendly labels for select social and messaging packages.  This map is
-# referenced by :mod:`social_app_finder` to keep the list of curated social apps
-# in a single location.
-SOCIAL_APP_LABELS = {
-    # TikTok and variants
-    "com.zhiliaoapp.musically": "TikTok",
-    "com.ss.android.ugc.trill": "TikTok",
-    "com.ss.android.ugc.aweme": "TikTok",
-    "com.ss.android.ugc.aweme.lite": "TikTok Lite",
-    "com.zhiliaoapp.musically.go": "TikTok Lite",
-    "com.tiktok.android": "TikTok",
-
-    # Meta/Facebook ecosystem
-    "com.instagram.android": "Instagram",
-    "com.facebook.katana": "Facebook",
-    "com.facebook.lite": "Facebook Lite",
-    "com.facebook.orca": "Messenger",
-
-    # Messaging platforms
-    "com.whatsapp": "WhatsApp",
-    "com.whatsapp.w4b": "WhatsApp Business",
-    "org.telegram.messenger": "Telegram",
-    "com.discord": "Discord",
-    "com.tencent.mm": "WeChat",
-    "org.thoughtcrime.securesms": "Signal",
-    "jp.naver.line.android": "LINE",
-
-    # Other social platforms
-    "com.snapchat.android": "Snapchat",
-    "com.twitter.android": "Twitter",
-    "com.reddit.frontpage": "Reddit",
-    "com.vkontakte.android": "VK",
-    "com.pinterest": "Pinterest",
-    "com.linkedin.android": "LinkedIn",
-}
+# Human-friendly labels for select social and messaging packages.  The mapping
+# itself now lives in :mod:`config.social_detection` so that both static
+# analysis and CSV detection utilities reference a single source of truth.  The
+# name is preserved here for backward compatibility with existing imports.
+from config.social_detection import SOCIAL_APP_PACKAGES as SOCIAL_APP_LABELS
 
 
 def get_category(package: str) -> str:
