@@ -42,3 +42,4 @@ def normalize_vendor(details: Dict[str, str]) -> str:
 
     # ✅ Fallback
     return "Unknown"
+
