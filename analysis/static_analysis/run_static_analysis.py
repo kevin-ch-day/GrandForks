@@ -1,4 +1,6 @@
 from pathlib import Path
+from datetime import datetime
+from typing import Iterable, List
 
 from . import (
     package_analysis,
@@ -11,27 +13,131 @@ import utils.logging_utils.logging_engine as log
 from config import app_config
 from utils.display_utils import menu_utils, theme
 from utils.adb_utils.adb_devices import get_connected_devices
+from utils.adb_utils.adb_runner import run_adb_command
 
 
-def analyze_device(serial: str, artifact_limit: int | None = None) -> None:
+def prepare_run_dirs(serial: str, base_dir: str | Path) -> tuple[Path, Path, Path, Path]:
+    """Create and return run, raw, reports, and apks directories."""
+
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    run_dir = Path(base_dir) / serial / timestamp
+    raw_dir = run_dir / "raw"
+    reports_dir = run_dir / "reports"
+    apks_dir = run_dir / "apks"
+    for d in (raw_dir, reports_dir, apks_dir):
+        d.mkdir(parents=True, exist_ok=True)
+    return run_dir, raw_dir, reports_dir, apks_dir
+
+
+def save_reports(
+    reports: List[dict], social_apps: List, reports_dir: Path
+) -> List[Path]:
+    """Write CSV reports and return their paths."""
+
+    packages_csv = reports_dir / "packages.csv"
+    report_formatter.write_csv_report(reports, str(packages_csv))
+
+    social_csv = reports_dir / "social_apps.csv"
+    report_formatter.write_social_csv(social_apps, str(social_csv))
+    return [packages_csv, social_csv]
+
+
+def update_latest_symlink(run_dir: Path) -> None:
+    """Point the device's ``latest`` symlink to ``run_dir``."""
+
+    latest_link = run_dir.parent / "latest"
+    try:
+        if latest_link.exists() or latest_link.is_symlink():
+            latest_link.unlink()
+        latest_link.symlink_to(run_dir.name)
+    except OSError:
+        pass
+
+
+def print_dashboard(
+    serial: str, run_dir: Path, reports: List[dict], social_apps: List, artifacts: Iterable[Path]
+) -> None:
+    """Display a summary dashboard for the analysis run."""
+
+    print("\nRun Dashboard")
+    print("-------------")
+    print(f"Serial        : {serial}")
+    print(f"Run path      : {run_dir}")
+    print(f"Package count : {len(reports)}")
+    print(f"Social hits   : {len(social_apps)}")
+    if social_apps:
+        print("\nSocial apps discovered:")
+        print("-----------------------")
+        for app in social_apps:
+            print(f" - {app.package} ({app.app_name})")
+    print("\nArtifacts:")
+    for art in artifacts:
+        try:
+            size = art.stat().st_size
+        except OSError:
+            size = 0
+        rel = art.relative_to(run_dir)
+        print(f" - {rel} ({size} bytes)")
+
+
+def pull_apks(serial: str, reports: Iterable, apks_dir: Path) -> List[Path]:
+    """Pull APKs referenced in ``reports`` into ``apks_dir``."""
+
+    pulled: List[Path] = []
+    if not apks_dir:
+        return pulled
+
+    print("- Pulling APKs...")
+    for rep in reports:
+        remote = getattr(rep, "apk_path", None)
+        name = getattr(rep, "name", None)
+        if isinstance(rep, dict):
+            remote = rep.get("apk_path")
+            name = rep.get("name")
+        if not remote or not name:
+            continue
+        local = apks_dir / f"{name}.apk"
+        res = run_adb_command(
+            serial, ["pull", remote, str(local)], timeout=60, log_errors=False
+        )
+        if res.get("success"):
+            pulled.append(local)
+    print(f"  Pulled {len(pulled)} APK(s)")
+    return pulled
+
+
+def analyze_device(
+    serial: str,
+    artifact_limit: int | None = None,
+    base_output_dir: str | Path = "output",
+) -> None:
     """Run static analysis against connected device packages."""
 
     print(f"\n📱 Starting static analysis for device {serial}")
     if artifact_limit is None:
         artifact_limit = getattr(app_config, "ARTIFACT_LIMIT", 3)
 
-    print("Gathering packages from device...")
-    reports = package_analysis.analyze_packages(serial)
+    run_dir, raw_dir, reports_dir, apks_dir = prepare_run_dirs(serial, base_output_dir)
+
+    reports = package_analysis.analyze_packages(serial, raw_dir=raw_dir)
     if not reports:
         print("⚠️  No packages found to analyze")
         return
 
-    print(f"Analyzing {len(reports)} package(s)")
+    social_apps = social_app_finder.find_social_apps(serial, raw_dir=raw_dir)
+
     report_formatter.print_reports(reports, serial, artifact_limit)
-    # Persist a machine-readable listing for downstream tooling
-    print("[run_static_analysis] Writing apk_list.csv for debug")
-    report_formatter.write_csv_report(reports, "apk_list.csv")
-    print("[run_static_analysis] apk_list.csv write complete")
+
+    csv_artifacts = save_reports(reports, social_apps, reports_dir)
+
+    apk_artifacts = pull_apks(serial, reports, apks_dir)
+
+    artifacts = list(csv_artifacts) + list(raw_dir.glob("*")) + apk_artifacts
+
+    print_dashboard(serial, run_dir, reports, social_apps, artifacts)
+
+    update_latest_symlink(run_dir)
+
     print(f"✅ Static analysis complete for {serial}")
     log.info(f"Static analysis complete for {serial}")
 
@@ -151,9 +257,10 @@ def static_analysis_menu() -> None:
         if not serial:
             print("❌ No device selected")
             return
+        base = input(theme.header("Output base directory (default 'output'): ")).strip() or "output"
         limit_input = input(theme.header("Max reports to show (blank for default): ")).strip()
         limit = int(limit_input) if limit_input.isdigit() else None
-        analyze_device(serial, artifact_limit=limit)
+        analyze_device(serial, artifact_limit=limit, base_output_dir=base)
 
     def _analyze_apk():
         apk_path = input(theme.header("Enter path to APK: ")).strip()

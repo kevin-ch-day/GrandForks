@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Dict, List, Optional
+from pathlib import Path
 
 import utils.logging_utils.logging_engine as log
 from utils.adb_utils.adb_runner import run_adb_command
@@ -41,8 +42,12 @@ def _parse_package_listing(output: str) -> Dict[str, str]:
     return packages
 
 
-def get_third_party_packages(serial: str) -> Dict[str, str]:
-    """Return mapping of installed third-party packages to their APK path."""
+def get_third_party_packages(serial: str, raw_dir: Path | None = None) -> Dict[str, str]:
+    """Return mapping of installed third-party packages to their APK path.
+
+    If ``raw_dir`` is provided, the raw command output is written to
+    ``raw_dir / 'third_party_packages.txt'``.
+    """
 
     print(f"Listing third-party packages on {serial}")
     result = run_adb_command(serial, ["shell", "pm", "list", "packages", "-f", "-3"])
@@ -54,6 +59,11 @@ def get_third_party_packages(serial: str) -> Dict[str, str]:
         return {}
 
     output = result.get("output") or ""
+    if raw_dir is not None:
+        try:
+            (raw_dir / "third_party_packages.txt").write_text(str(output))
+        except OSError:
+            pass
     packages = _parse_package_listing(str(output))
     print(f"  Found {len(packages)} package(s)")
     return packages
@@ -103,11 +113,11 @@ def get_app_info(serial: str, package: str) -> tuple[Optional[str], Dict[str, st
     return label, meta
 
 
-def find_social_apps(serial: str) -> List[SocialApp]:
+def find_social_apps(serial: str, raw_dir: Path | None = None) -> List[SocialApp]:
     """Identify installed social apps on the device identified by ``serial``."""
 
     print(f"\n🔎 Searching for social apps on {serial}")
-    packages = get_third_party_packages(serial)
+    packages = get_third_party_packages(serial, raw_dir=raw_dir)
     found: List[SocialApp] = []
     for pkg in packages:
         if pkg not in SOCIAL_APPS:

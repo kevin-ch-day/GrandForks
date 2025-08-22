@@ -9,8 +9,16 @@ from analysis.static_analysis import package_analysis
 
 
 def test_analyze_packages_shows_steps(monkeypatch, capsys):
-    monkeypatch.setattr(package_analysis, 'get_all_package_permissions', lambda s: {'pkg': []})
-    monkeypatch.setattr(package_analysis, 'get_installed_apk_paths', lambda s: {'pkg': 'path.apk'})
+    monkeypatch.setattr(
+        package_analysis,
+        'get_all_package_permissions',
+        lambda s, raw_dir=None: {'pkg': []},
+    )
+    monkeypatch.setattr(
+        package_analysis,
+        'get_installed_apk_paths',
+        lambda s, raw_dir=None: {'pkg': 'path.apk'},
+    )
     monkeypatch.setattr(
         package_analysis,
         'verify_package_apks',
