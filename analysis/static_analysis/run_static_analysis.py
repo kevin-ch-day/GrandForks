@@ -1,6 +1,6 @@
 from pathlib import Path
 from datetime import datetime
-from typing import Iterable, List
+from typing import Iterable, List, Optional
 
 from . import (
     package_analysis,
@@ -16,15 +16,17 @@ from utils.adb_utils.adb_devices import get_connected_devices
 from utils.adb_utils.adb_runner import run_adb_command
 
 
-def prepare_run_dirs(serial: str, base_dir: str | Path) -> tuple[Path, Path, Path, Path]:
-    """Create and return run, raw, reports, and apks directories."""
+def prepare_run_dirs(
+    serial: str, base_dir: str | Path, pull_apks: bool = True
+) -> tuple[Path, Path, Path, Optional[Path]]:
+    """Create and return run, raw, reports, and optional apks directories."""
 
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     run_dir = Path(base_dir) / serial / timestamp
     raw_dir = run_dir / "raw"
     reports_dir = run_dir / "reports"
-    apks_dir = run_dir / "apks"
-    for d in (raw_dir, reports_dir, apks_dir):
+    apks_dir = run_dir / "apks" if pull_apks else None
+    for d in (raw_dir, reports_dir, *( [apks_dir] if apks_dir else [] )):
         d.mkdir(parents=True, exist_ok=True)
     return run_dir, raw_dir, reports_dir, apks_dir
 
@@ -110,6 +112,7 @@ def analyze_device(
     serial: str,
     artifact_limit: int | None = None,
     base_output_dir: str | Path = "output",
+    pull_apk_files: bool = True,
 ) -> None:
     """Run static analysis against connected device packages."""
 
@@ -117,7 +120,9 @@ def analyze_device(
     if artifact_limit is None:
         artifact_limit = getattr(app_config, "ARTIFACT_LIMIT", 3)
 
-    run_dir, raw_dir, reports_dir, apks_dir = prepare_run_dirs(serial, base_output_dir)
+    run_dir, raw_dir, reports_dir, apks_dir = prepare_run_dirs(
+        serial, base_output_dir, pull_apks=pull_apk_files
+    )
 
     reports = package_analysis.analyze_packages(serial, raw_dir=raw_dir)
     if not reports:
@@ -257,10 +262,24 @@ def static_analysis_menu() -> None:
         if not serial:
             print("❌ No device selected")
             return
-        base = input(theme.header("Output base directory (default 'output'): ")).strip() or "output"
-        limit_input = input(theme.header("Max reports to show (blank for default): ")).strip()
+        base = (
+            input(theme.header("Output base directory (default 'output'): ")).strip()
+            or "output"
+        )
+        limit_input = input(
+            theme.header("Max reports to show (blank for default): ")
+        ).strip()
         limit = int(limit_input) if limit_input.isdigit() else None
-        analyze_device(serial, artifact_limit=limit, base_output_dir=base)
+        pull_choice = (
+            input(theme.header("Pull APKs to local dir? [y/N]: ")).strip().lower()
+        )
+        pull_apks = pull_choice == "y"
+        analyze_device(
+            serial,
+            artifact_limit=limit,
+            base_output_dir=base,
+            pull_apk_files=pull_apks,
+        )
 
     def _analyze_apk():
         apk_path = input(theme.header("Enter path to APK: ")).strip()
