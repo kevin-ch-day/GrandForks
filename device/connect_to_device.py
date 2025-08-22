@@ -2,6 +2,7 @@
 
 from device import show_devices
 from device.device_menu import interactive_device_menu
+
 from utils.display_utils import error_utils
 from utils.adb_utils.adb_devices import DeviceInfo
 import utils.logging_utils.logging_engine as log
