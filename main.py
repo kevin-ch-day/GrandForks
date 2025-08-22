@@ -1,11 +1,14 @@
 # main.py
+import sys
 import signal
 import argparse
 import logging
+from pathlib import Path
 
 from config import app_config
 from utils.display_utils import theme
 import utils.logging_utils.logging_engine as log
+from utils.csv_utils import validate_apk_list, read_apk_list
 
 from main_menu import MainMenu
 
@@ -47,7 +50,37 @@ def main():
         action="store_true",
         help="Suppress artifact display in analysis output",
     )
+    parser.add_argument(
+        "--validate",
+        metavar="APK_LIST",
+        type=Path,
+        help="Validate an apk_list.csv and optionally compare with raw/pm_list_packages.txt",
+    )
     args = parser.parse_args()
+
+    if args.validate:
+        csv_path: Path = args.validate
+        if validate_apk_list(csv_path):
+            pm_list = csv_path.resolve().parent / "raw" / "pm_list_packages.txt"
+            if pm_list.exists():
+                csv_count = len(read_apk_list(csv_path))
+                with pm_list.open(encoding="utf-8") as f:
+                    pm_count = sum(1 for line in f if line.strip())
+                delta = csv_count - pm_count
+                if delta:
+                    print(
+                        f"Package count mismatch: apk_list.csv has {csv_count}, "
+                        f"pm_list_packages.txt has {pm_count} (delta {delta})"
+                    )
+                    sys.exit(1)
+                else:
+                    print(f"Package counts match: {csv_count}")
+            else:
+                print(f"pm_list_packages.txt not found at {pm_list}, skipping comparison")
+            sys.exit(0)
+        else:
+            print("APK list validation failed")
+            sys.exit(1)
 
     # Apply theme from flag or config default
     selected_palette = args.theme or getattr(app_config, "THEME_PALETTE", None)
