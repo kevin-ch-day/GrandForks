@@ -9,6 +9,7 @@ from utils.display_utils import menu_utils, error_utils, theme
 import utils.logging_utils.logging_engine as log
 from device import show_devices, connect_to_device
 from utils.about_app import about_app
+from database.db_menu import db_menu
 
 
 # ---------- Menu Actions ----------
@@ -38,8 +39,8 @@ def action_connect_to_device():
 def action_database_menu():
     """Action: Database menu placeholder."""
     log.info("Opened Database Menu")
-    # TODO: Hook into actual DB logic once implemented
-    print("\n[TODO] Database Menu\n")
+    # Delegate to database menu placeholder
+    db_menu()
 
 
 # ---------- Signal Handling ----------
