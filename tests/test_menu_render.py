@@ -49,3 +49,19 @@ def test_highlight_accent_style(capsys):
     )
     out = capsys.readouterr().out
     assert theme.color("fg.accent") in out
+
+
+def test_numeric_key_sorting(capsys):
+    options = {"10": ("Ten", dummy), "2": ("Two", dummy)}
+    menu_utils.print_menu_options(options, "Exit")
+    plain = strip_ansi(capsys.readouterr().out)
+    lines = [line.strip() for line in plain.splitlines() if line.strip()]
+    assert lines[:2] == ["[2] Two", "[10] Ten"]
+
+
+def test_non_numeric_key_sorting(capsys):
+    options = {"b": ("Bravo", dummy), "a": ("Alpha", dummy)}
+    menu_utils.print_menu_options(options, "Exit")
+    plain = strip_ansi(capsys.readouterr().out)
+    lines = [line.strip() for line in plain.splitlines() if line.strip()]
+    assert lines[:2] == ["[a] Alpha", "[b] Bravo"]
