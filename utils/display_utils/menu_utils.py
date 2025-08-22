@@ -32,7 +32,10 @@ def print_menu_options(
     """Render all menu options in sorted order.
 
     Args:
-        options: Mapping of option keys to (label, callable).
+        options: Mapping of option keys to (label, callable). Keys are strings
+            such as "1", "A", etc. Keys comprised solely of digits are sorted
+            numerically; all other keys fall back to lexical (alphabetical)
+            ordering. Mixing numeric and non-numeric keys is supported.
         exit_label: Text for the exit option.
         highlight: Option key to visually emphasize.
         highlight_style: Style token for highlighting (inverse, bold, accent).
@@ -45,7 +48,11 @@ def print_menu_options(
         "accent": theme.style("fg.accent", "bold"),
     }
     style_fn = styles.get(highlight_style, styles["inverse"])
-    for key in sorted(options.keys(), key=lambda x: int(x)):
+
+    def sort_key(k: str):
+        return (0, int(k)) if k.isdigit() else (1, k)
+
+    for key in sorted(options.keys(), key=sort_key):
         label, _ = options[key]
         hot = num_style(f"[{key}]")
         if highlight == key:
