@@ -81,6 +81,26 @@ def is_adb_available(log_errors: bool = True) -> bool:
     return False
 
 
+def ensure_device_ready(serial: str) -> Dict[str, Union[bool, str]]:
+    """Block until the given device is ready for adb commands."""
+
+    wait_res = execute_command(["adb", "-s", serial, "wait-for-device"])
+    if not wait_res.get("success"):
+        return wait_res
+
+    state_res = execute_command(["adb", "-s", serial, "get-state"])
+    if not state_res.get("success"):
+        return state_res
+
+    state = state_res.get("output", "").strip()
+    if state != "device":
+        msg = f"Device {serial} not ready (state: {state})"
+        log.error(msg)
+        return {"success": False, "output": state, "error": msg}
+
+    return {"success": True, "output": state, "error": ""}
+
+
 def run_adb_command(
     serial: Optional[str],
     args: List[str],
@@ -95,6 +115,30 @@ def run_adb_command(
     """
     if not is_adb_available(log_errors=log_errors):
         return {"success": False, "output": "", "error": "adb not found"}
+
+    needs_device = args and args[0] != "devices"
+
+    if needs_device and serial is None:
+        devices_res = execute_command(["adb", "devices", "-l"], log_errors=log_errors)
+        if not devices_res.get("success"):
+            return devices_res
+        lines = [l for l in devices_res.get("output", "").splitlines()[1:] if l.strip()]
+        if len(lines) > 1:
+            msg = "Multiple devices connected. Use --device to specify one."
+            if log_errors:
+                log.error(msg)
+            return {"success": False, "output": "", "error": msg}
+        if len(lines) == 0:
+            msg = "No adb devices connected"
+            if log_errors:
+                log.error(msg)
+            return {"success": False, "output": "", "error": msg}
+        serial = lines[0].split()[0]
+
+    if needs_device and serial:
+        ready = ensure_device_ready(serial)
+        if not ready.get("success"):
+            return ready
 
     cmd = build_adb_command(serial, args)
     return execute_command(

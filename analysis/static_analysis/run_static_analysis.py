@@ -104,7 +104,7 @@ def list_social_apps(serial: str) -> None:
 
 
 def _resolve_serial(provided: str | None) -> str | None:
-    """Return a serial either from argument or user selection."""
+    """Return a serial either from argument or automatic selection."""
 
     devices = get_connected_devices()
     if provided:
@@ -118,24 +118,13 @@ def _resolve_serial(provided: str | None) -> str | None:
         print("No connected devices found")
         return None
 
-    if len(devices) == 1:
-        serial = devices[0].serial
-        print(f"Using connected device: {serial}")
-        return serial
-
-    print("Multiple devices detected:")
-    for idx, dev in enumerate(devices, start=1):
-        model = getattr(dev, "model", "unknown") or "unknown"
-        print(f" {idx}. {dev.serial} ({model})")
-
-    choice = input("Select device number: ").strip()
-    try:
-        selected = devices[int(choice) - 1]
-        print(f"Selected device: {selected.serial}")
-        return selected.serial
-    except (ValueError, IndexError):
-        print("Invalid selection")
+    if len(devices) > 1:
+        print("Multiple devices detected. Specify one with --device.")
         return None
+
+    serial = devices[0].serial
+    print(f"Using connected device: {serial}")
+    return serial
 
 
 def validate_apk_path(apk_path: str) -> bool:

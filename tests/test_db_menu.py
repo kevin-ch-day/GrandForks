@@ -23,10 +23,10 @@ def test_db_menu_provides_test_connection_option_and_uses_engine():
 
     with mock.patch.object(db_menu_mod, "DbEngine", return_value=fake_engine) as eng_cls, \
          mock.patch.object(db_menu_mod, "DatabaseCore") as core_cls, \
-         mock.patch.object(db_menu_mod.menu_utils, "show_menu") as show_menu:
+         mock.patch("menus.base.menu_utils.show_menu") as show_menu:
         core_cls.from_config.return_value = fake_core
 
-        def fake_show_menu(title, options, exit_label):
+        def fake_show_menu(title, options, exit_label, highlight_choice=None, highlight_style='accent'):
             # Menu contains only the test connection option
             assert options["1"][0].lower().startswith("test")
             # Simulate selecting the option
@@ -44,8 +44,9 @@ def test_db_menu_provides_test_connection_option_and_uses_engine():
 
 
 def test_action_database_menu_invokes_db_menu():
-    import main
+    import main_menu
 
-    with mock.patch.object(main, "db_menu") as menu:
-        main.action_database_menu()
-        menu.assert_called_once()
+    with mock.patch.object(main_menu, "DatabaseMenu") as menu_cls:
+        instance = menu_cls.return_value
+        main_menu.action_database_menu()
+        instance.show.assert_called_once()
