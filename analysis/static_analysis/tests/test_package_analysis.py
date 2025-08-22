@@ -102,5 +102,41 @@ class PackageAnalysisTests(unittest.TestCase):
         self.assertEqual(reports, [])
 
 
+class ComputeApkHashesTests(unittest.TestCase):
+    def _run_with_output(self, output: str):
+        apk_map = {"com.example.app": "/data/app/com.example.app-1/base.apk"}
+
+        def fake_run_adb_command(serial, cmd):
+            return {"success": True, "output": output}
+
+        with patch.object(pa, "run_adb_command", side_effect=fake_run_adb_command), patch.object(
+            pa.log, "warning"
+        ) as mock_warn:
+            hashes = pa.compute_apk_hashes("ABC123", apk_map)
+
+        return hashes, mock_warn
+
+    def test_compute_apk_hashes_empty_output(self):
+        hashes, mock_warn = self._run_with_output("")
+        self.assertEqual(hashes, {})
+        mock_warn.assert_called()
+
+    def test_compute_apk_hashes_whitespace_output(self):
+        hashes, mock_warn = self._run_with_output("   ")
+        self.assertEqual(hashes, {})
+        mock_warn.assert_called()
+
+    def test_compute_apk_hashes_malformed_output(self):
+        hashes, mock_warn = self._run_with_output("not-a-hash-value")
+        self.assertEqual(hashes, {})
+        mock_warn.assert_called()
+
+    def test_compute_apk_hashes_mismatched_path(self):
+        hashes, mock_warn = self._run_with_output(
+            "hashvalue /data/app/other.apk"
+        )
+        self.assertEqual(hashes, {})
+        mock_warn.assert_called()
+
 if __name__ == "__main__":
     unittest.main()
