@@ -204,14 +204,25 @@ def compute_apk_hashes(
 
 def analyze_packages(serial: str) -> List[PackageReport]:
     """Gather package, permission, and risk information for ``serial``."""
+    print("- Retrieving package permissions...")
     perms_map = get_all_package_permissions(serial)
+    print(f"  Found {len(perms_map)} package(s)")
+
+    print("- Listing installed APK paths...")
     apk_paths = get_installed_apk_paths(serial)
+    print(f"  Located paths for {len(apk_paths)} package(s)")
+
+    print("- Verifying APK availability...")
     verified_apks, missing = verify_package_apks(perms_map.keys(), apk_paths)
+    print(f"  Verified APKs for {len(verified_apks)} package(s)")
 
     if missing:
         log.info(f"Skipping {len(missing)} packages without APKs")
+        print(f"  Skipping {len(missing)} package(s) without APKs")
 
+    print("- Computing APK hashes...")
     hashes = compute_apk_hashes(serial, verified_apks)
+    print(f"  Calculated hashes for {len(hashes)} package(s)")
 
     packages = list(verified_apks.keys())
     total = len(packages)

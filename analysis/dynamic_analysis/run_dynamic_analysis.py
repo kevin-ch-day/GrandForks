@@ -33,21 +33,26 @@ def run_dynamic_analysis(
 
     out_dir = Path(output_dir) if output_dir else Path("dynamic_analysis")
     out_dir.mkdir(parents=True, exist_ok=True)
+    print(f"[+] Output directory: {out_dir.resolve()}")
 
     logcat_path = out_dir / "logcat.txt"
     activity_path = out_dir / "activity.txt"
 
     # Capture a snapshot of logcat
+    print(f"[+] Capturing logcat for {serial}...")
     logcat_res = run_adb_command(
         serial, ["logcat", "-d"], timeout=duration, log_errors=False
     )
     if logcat_res["success"]:
+        print(f"[+] Writing logcat to {logcat_path}")
         logcat_path.write_text(logcat_res["output"])
     else:
+        print(f"[!] Failed to capture logcat: {logcat_res['error']}")
         log.warning(logcat_res["error"])
         logcat_path.write_text("")
 
     # Capture the current activity stack
+    print(f"[+] Capturing activity stack for {serial}...")
     activity_res = run_adb_command(
         serial,
         ["shell", "dumpsys", "activity", "activities"],
@@ -55,8 +60,10 @@ def run_dynamic_analysis(
         log_errors=False,
     )
     if activity_res["success"]:
+        print(f"[+] Writing activity stack to {activity_path}")
         activity_path.write_text(activity_res["output"])
     else:
+        print(f"[!] Failed to capture activity stack: {activity_res['error']}")
         log.warning(activity_res["error"])
         activity_path.write_text("")
 

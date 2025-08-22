@@ -11,11 +11,33 @@ from utils.adb_utils.adb_devices import get_connected_devices
 
 
 def _resolve_serial(provided: str | None) -> str | None:
-    """Return a serial either from argument or first connected device."""
+    """Return a serial either from argument or user selection."""
+
     if provided:
+        print(f"Using provided serial: {provided}")
         return provided
+
     devices = get_connected_devices()
-    return devices[0].serial if devices else None
+    if not devices:
+        return None
+
+    if len(devices) == 1:
+        print(f"Using connected device: {devices[0].serial}")
+        return devices[0].serial
+
+    print("Multiple devices detected:")
+    for idx, dev in enumerate(devices, start=1):
+        model = getattr(dev, "model", "unknown") or "unknown"
+        print(f" {idx}. {dev.serial} ({model})")
+
+    choice = input("Select device number: ").strip()
+    try:
+        selected = devices[int(choice) - 1]
+        print(f"Selected device: {selected.serial}")
+        return selected.serial
+    except (ValueError, IndexError):
+        print("Invalid selection")
+        return None
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -44,9 +66,15 @@ def main(argv: list[str] | None = None) -> int:
 
     serial = _resolve_serial(args.serial)
     if not serial:
-        print("No devices connected")
+        print("No devices connected or selected")
         return 1
 
+    if args.output_dir:
+        print(f"Output directory set to: {args.output_dir.resolve()}")
+    else:
+        print("No output directory provided; using default 'dynamic_analysis'")
+
+    print(f"Starting dynamic analysis on {serial}")
     run_dynamic_analysis(serial, output_dir=args.output_dir, duration=args.duration)
     return 0
 

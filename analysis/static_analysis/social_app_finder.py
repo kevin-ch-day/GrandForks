@@ -43,15 +43,20 @@ def _parse_package_listing(output: str) -> Dict[str, str]:
 
 def get_third_party_packages(serial: str) -> Dict[str, str]:
     """Return mapping of installed third-party packages to their APK path."""
+
+    print(f"Listing third-party packages on {serial}")
     result = run_adb_command(serial, ["shell", "pm", "list", "packages", "-f", "-3"])
     if not result.get("success", False):
         log.warning(
             f"ADB failed while listing packages for {serial} :: {result.get('error', '')}"
         )
+        print("  Failed to list packages")
         return {}
 
     output = result.get("output") or ""
-    return _parse_package_listing(str(output))
+    packages = _parse_package_listing(str(output))
+    print(f"  Found {len(packages)} package(s)")
+    return packages
 
 
 def get_apk_paths(serial: str, package: str) -> List[str]:
@@ -100,11 +105,14 @@ def get_app_info(serial: str, package: str) -> tuple[Optional[str], Dict[str, st
 
 def find_social_apps(serial: str) -> List[SocialApp]:
     """Identify installed social apps on the device identified by ``serial``."""
+
+    print(f"\n🔎 Searching for social apps on {serial}")
     packages = get_third_party_packages(serial)
     found: List[SocialApp] = []
     for pkg in packages:
         if pkg not in SOCIAL_APPS:
             continue
+        print(f"  Inspecting {pkg}")
         apk_paths = get_apk_paths(serial, pkg)
         label, meta = get_app_info(serial, pkg)
         found.append(
@@ -116,4 +124,9 @@ def find_social_apps(serial: str) -> List[SocialApp]:
                 metadata=meta,
             )
         )
+
+    if found:
+        print(f"Identified {len(found)} social app(s)")
+    else:
+        print("No known social apps detected")
     return found

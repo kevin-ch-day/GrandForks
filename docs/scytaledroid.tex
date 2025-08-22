@@ -1,0 +1,133 @@
+\documentclass[10pt,conference]{IEEEtran}
+
+% -------- IEEE-friendly packages --------
+\usepackage{cite}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{graphicx}
+\usepackage[caption=false,font=footnotesize]{subfig} % IEEEtran + subfig
+\usepackage{booktabs}
+\usepackage{multirow}
+\usepackage{tabularx}
+\usepackage{xcolor}
+\usepackage{url}
+\usepackage[hidelinks]{hyperref}
+
+% Keep authblk for your author/affiliation layout (as requested)
+\usepackage{authblk}
+
+\hyphenation{op-tical net-works semi-conduc-tor}
+
+% --------------- Title ---------------
+\title{ScytaleDroid: Efficient Android Device Inventory and ML-Assisted Static Analysis}
+
+% ====== UNCHANGED (per your request) ======
+\author[1]{Kevin Day\thanks{C. C@university. edu}}
+\author[1]{Khaled Rabieh\thanks{A. A@university. edu}}
+\author[1]{Faisal Kaleem\thanks{A. A@university. edu}}
+
+\affil[1]{Department of Computer Science and Cybersecurity, Metro State University, Saint Paul, MN 55106 USA}
+% ==========================================
+
+% -------- Page header style: page number at TOP, first page empty --------
+\makeatletter
+\newcommand{\PaperNumber}[1]{\gdef\@papernumber{#1}}
+\gdef\@papernumber{} % default: none
+
+% Custom header style: "Paper #<id>" (if set) on one side, page number on the other
+\def\ps@ieeehead{% 
+  \def\@oddhead{% 
+    \footnotesize
+    \ifx\@papernumber\@empty\relax\else Paper~\@papernumber\quad\fi
+    \hfill\thepage}%
+  \def\@evenhead{% 
+    \footnotesize
+    \thepage\hfill
+    \ifx\@papernumber\@empty\relax\else Paper~\@papernumber\fi}%
+  \def\@oddfoot{}%
+  \def\@evenfoot{}%
+}
+\makeatother
+
+\begin{document}
+
+% (Optional) set your submission paper number once here:
+% \PaperNumber{1234}
+
+\maketitle
+\thispagestyle{empty}      % No page number on the first page
+\pagestyle{ieeehead}       % Page numbers in the header on subsequent pages
+
+\begin{abstract}
+Android triage is dominated by ad-hoc shell scripts that repeatedly query \texttt{adb}, yield brittle text parsing, and offer little principled guidance on which applications merit scrutiny. \emph{ScytaleDroid} is a terminal-first framework that standardizes device discovery and application inventory, performs lightweight static inspection, and improves the results with machine-learned interpretable risk scores. Efficiency is achieved by replacing per-package loops with single-snapshot parsing (e.g., \texttt{adb shell dumpsys package}) and by selectively pulling resolvable APKs only when necessary. A modular extractor assembles compact static features—declared permissions, component/export status, signing and size metadata, and optional string/API surface indicators via AAPT2 or Androguard—suitable for fast, offline modeling. Compact supervised models (e.g., logistic regression and gradient-boosted trees) rank apps by risk and return human-readable rationales (feature importances and SHAP-style summaries) to support rapid, defensible triage. The operator experience is unified through a theming API optimized for dark terminals, producing column-aligned tables and consistent warning/error semantics while keeping audit logs separate from on-screen output. Evaluation emphasizes practical gains—reduced wall-clock time and \texttt{adb} invocations—and reports classification metrics (ROC-AUC, PR-AUC, F1) against permissions-only and linear baselines.
+\end{abstract}
+
+\begin{IEEEkeywords}
+Android, mobile security, static analysis, ADB, interpretable ML, risk scoring
+\end{IEEEkeywords}
+
+\section{Introduction}\label{sec:intro}
+Android device identification remains a routine, yet fragile task in security operations, incident response, and academic labs. In practice, analysts cobble together ad-hoc shell scripts that iterate over applications with repeated \texttt{adb} calls, scrape textual output with fragile regular expressions, and produce inconsistent console views across different host environments. These workflows are slow (many small round-trips to the device), noisy (unstructured logs intermixed with results) and offer little principled guidance on \emph{which} applications that deserve attention first. As app ecosystems grow and device images diversify across OEMs and carriers, the lack of standardized inventory and prioritization increasingly constrains time-critical investigations.
+
+We present \emph{ScytaleDroid}, a Android framework that unifies device discovery, application inventory, and static inspection while introducing a learning-based, interpretable risk classification. The core engineering idea is to replace per-package loops with \emph{batched} system snapshots (e.g., a single \texttt{adb shell dumpsys package} pass) and to apply selective APK retrieval only when resolvable paths and permissions allow it. On the operator side, ScytaleDroid standardizes the feedback via a small theming API designed for dark terminals, yielding column-aligned tables, uniform warning/error conventions, and graceful degradation when ANSI color is unavailable. On the analysis side, the framework extracts lightweight static features. Features include declared permissions, export status of components, signing/size metadata, and optional string/API surface indicators via \texttt{aapt2} or Androguard. Thus, that enable compact, transparent models (e.g. logistic regression or gradient-boosted trees) to produce risk scores together with human-readable rationales. We investigate the following research questions:
+\begin{itemize}
+  \item \textbf{RQ1:} ??
+  \item \textbf{RQ2:} ??
+  \item \textbf{RQ3:} ??
+\end{itemize}
+
+Our contributions are threefold. First, we introduce a modular inventory pipeline centered on single-snapshot parsing and selective APK handling, reducing round-trips and improving robustness to OEM/carrier overlays. Second, we provide an operator experience tailored for black-background terminals with a theming API that enforces consistent typography, color semantics, and compact tabular layouts suitable for time-pressured use. Third, we integrate interpretable learning-based risk estimation that surfaces concise justifications (e.g., feature importances or SHAP-style summaries) to support defensible prioritization without requiring heavyweight dynamic analysis.
+
+\section{Background}\label{sec:background}
+\subsection{Android Platform Realities}
+Android packages (APKs) bundle bytecode (DEX), resources, and a manifest that declares components and \texttt{uses\mbox{-}permission} entries. Since Android~6.0, many permissions are granted at runtime, while signature schemes (v2/v3/v4) bind identity to a signing lineage that governs updates and trust. Contemporary devices distribute system artifacts across \texttt{/system}, \texttt{/product}, \texttt{/system\_ext}, and \texttt{/vendor}; APEX modules, split APKs, and Runtime Resource Overlays (RRO) further complicate inventory by multiplying code and resource locations. Effective triage must therefore handle overlays and splits, tolerate read restrictions on privileged partitions, and avoid assumptions about OEM- or carrier-specific packaging.
+
+\subsection{ADB Access and Triage Constraints}
+The Android Debug Bridge (ADB) is the de facto control plane for discovery and inspection on non-rooted devices. Routine tasks rely on \texttt{adb devices -l} for enumeration, \texttt{adb shell dumpsys package} for global package state, and \texttt{pm} subcommands to list packages or resolve code paths. Naïve automation loops over packages and issues per-app queries and pulls, producing thousands of round trips that inflate wall-clock time and increase failure surface, particularly over high-latency links or with emulators. In practice, the package manager’s global dump already contains per-package blocks adequate for first-look inventory and permission extraction; APK pulling should be \emph{selective}, fail-tolerant, and bounded by timeouts. Clean separation between human-facing output and machine logs improves reproducibility and auditability.
+
+\subsection{Lightweight Static Evidence}
+First-look assessment benefits from features that are quick to extract, robust to OEM customization, and available without elevated privileges. Manifest-level signals—declared permissions, component export status, intent filters, custom permissions, min/target SDKs—offer immediate policy and exposure cues. Resource- and string-level indicators (endpoints, tokens, library names, configuration keys) can be surfaced via AAPT2-style parsing without full decompilation. When toolchains are present, coarse bytecode features (API family usage, cryptography/IPC/reflection hints, structural metrics) provide additional texture at modest cost. A modular extractor that prioritizes manifest and resource layers, and opportunistically enriches with code-level cues, strikes a practical balance between coverage and latency.
+
+\subsection{Interpretable ML and Operator-Centered UX}
+Machine learning can prioritize analyst attention if scores are stable and explanations are actionable. Linear models (e.g., logistic regression) yield calibrated probabilities and transparent coefficients; gradient-boosted trees capture simple interactions while supporting gain-based or SHAP-style attributions. Labels may be derived from AV consensus, curated allow/deny lists, or policy rules; evaluation must handle imbalance and drift across Android releases and vendor variants. Equally important are operator concerns: deterministic runs (seeded configs, version pinning), bounded latency (batching, timeouts), and disciplined presentation. A small theming API with severity-aware color and column-aligned tables improves readability on dark terminals, while structured logs enable later audit. These considerations motivate a design that marries batched collection, lean features, interpretable scoring, and consistent UX to deliver practical, defensible triage.
+
+\section{Related Works}\label{sec:relatedwork}
+Related Works goes here
+
+\section{Methodology}\label{sec:method}
+\subsection{System Overview}
+ScytaleDroid is a terminal‐first pipeline that couples batched device interrogation with lightweight static analysis and interpretable risk scoring. As shown conceptually in Fig.~\ref{fig:pipeline} (omitted for space), the system proceeds in four stages: (1) \emph{device inventory} via a single snapshot of the package manager state; (2) \emph{selective APK acquisition} for resolvable paths under user‐defined budget constraints; (3) \emph{feature extraction} from manifests, resources, and optional bytecode; and (4) \emph{risk estimation} using compact supervised models that surface per‐feature rationales. The CLI renders operator feedback through a theming API optimized for dark terminals, while a structured logging layer retains audit traces. All experiments target Linux (Fedora) with pinned toolchain versions (ADB, AAPT2, Androguard) to ensure reproducibility.
+
+\subsection{Batched Inventory and Selective Acquisition}
+To minimize round trips, ScytaleDroid replaces per‐package loops with a single \texttt{adb shell dumpsys package}, which contains contiguous blocks for all installed packages. From this snapshot we extract package identifiers, code and resource paths, declared permissions, component/export configuration, and signer lineage when present. Code paths are vendor and partition‐aware (\texttt{/system}, \texttt{/product}, \texttt{/system\_ext}, \texttt{/vendor}, APEX, RRO); paths that are unreadable on non‐rooted devices are marked \emph{unpullable} and skipped without aborting the run. When acquisition is enabled, resolvable APKs are pulled under timeouts using bounded parallelism (\textit{N} workers) and a global budget (\textit{B} MB or \textit{T} seconds). Failures (e.g., permission denied under \texttt{/vendor}) are recorded but do not halt analysis. Snapshot caching avoids re‐enumeration within a session; optional content hashing (SHA‐256) deduplicates identical artifacts across overlays and splits.
+
+\subsection{Feature Extraction}
+Feature extractors are modular and ordered by cost. The \emph{manifest module} parses \texttt{AndroidManifest.xml} to collect: (i) binary indicators for \texttt{uses\mbox{-}permission} entries; (ii) component export states and protected permissions; (iii) \texttt{minSdk}/\texttt{targetSdk}; and (iv) signer and package attributes when available. The \emph{resource/string module} (AAPT2) emits sparse indicators of hostnames, token‐like patterns, library identifiers, and analytics/advertising SDK hints derived from string tables and resource names. When toolchains are present, the \emph{bytecode module} (Androguard) contributes coarse signals such as API family counts (crypto, IPC, reflection), control‐flow surrogates (method count, average basic blocks), and sensitive callsites. Each app is represented by a fixed‐length vector $\mathbf{f}(x)\in\mathbb{R}^d$ comprising: one‐hot permissions, categorical encodings of components, normalized size and signer features, and optional sparse string/API features. All features undergo deterministic preprocessing (lowercasing, hashing for high‐cardinality tokens, min–max scaling for continuous terms) governed by a versioned schema.
+
+\subsection{Risk Modeling and Attribution}
+We target interpretable, low‐latency models. A logistic regression (LR) baseline with $\ell_2$ regularization provides calibrated probabilities:
+\[
+ s(x)=\sigma\!\left(\mathbf{w}^{\top}\mathbf{f}(x)+b\right),
+\]
+where $s(x)\in[0,1]$ is the predicted risk. A gradient‐boosted tree (GBT) model complements LR by capturing modest feature interactions while remaining amenable to gain‐based importances and SHAP‐style local attributions. Labels are derived from consensus heuristics over static scanners and curated policy lists using a $k$‐of‐$m$ rule (e.g., $k{=}3$ engines flag an app as risky), with noisy labels mitigated by class‐balanced losses and threshold tuning on a validation split. To support operator trust, the CLI surfaces a \emph{top‐$K$ rationale} for each score: LR exposes the largest positive coefficients multiplied by feature values; GBT exposes the highest absolute SHAP contributions. Scores are bucketed into \{low, medium, high\} using isotonic‐calibrated thresholds learned on the validation set.
+
+\subsection{Evaluation Protocol}
+We evaluate three dimensions: efficiency, fidelity, and usability. \emph{Efficiency} is measured by wall‐clock time, number of ADB invocations, and bytes transferred, comparing ScytaleDroid to a naïve per‐package baseline on both physical and emulator devices. \emph{Fidelity} is assessed with ROC–AUC, PR–AUC, F1, and Matthews correlation (MCC) against two baselines: (i) permissions‐only LR and (ii) a Drebin‐style linear SVM on string/API features. We perform 5× stratified splits with device‐aware grouping to avoid leakage across firmware variants. \emph{Usability} is probed through operator‐centric metrics: percentage of risky apps surfaced in the top $N$, and time to first high‐risk detection. Ablations remove feature families (permissions, components, strings, bytecode) to quantify their marginal contribution. All runs are reproducible via fixed seeds, pinned dependencies, and serialized preprocessing/model artifacts.
+
+\section{Results}\label{sec:results}
+Results
+
+\section{Discussion}\label{sec:discussion}
+
+Discussion
+
+\section{Conclusion}\label{sec:conclusion}
+
+Conclusion
+
+\section{Future Work}\label{futurework}
+
+Future extensions of \emph{ScytaleDroid} will pursue three threads: analysis depth, learning fidelity, and operator experience. On analysis depth, we plan to augment the static pipeline with opt-in, budgeted dynamic probes (e.g., intent fuzzing, IPC surface pinging, lightweight network capture) and cross-check findings against emulator snapshots to quantify physical–virtual divergence. On learning fidelity, we will expand and publish a versioned corpus of Android applications with consensus labels, investigate semi-/weak-supervised schemes for sparse ground truth, calibrate risk probabilities across firmware variants, and harden models against adversarial obfuscation and concept drift.
+
+\bibliographystyle{IEEEtran}
+\bibliography{references}
+\end{document}

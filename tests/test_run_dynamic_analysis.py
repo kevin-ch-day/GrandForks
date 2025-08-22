@@ -29,7 +29,9 @@ def test_run_dynamic_analysis_collects_logs(tmp_path, capsys, monkeypatch):
     paths = run_dynamic_analysis("serial123", output_dir=tmp_path, duration=5)
 
     out_lines = capsys.readouterr().out.strip().splitlines()
-    assert "Dynamic analysis complete for serial123" in out_lines[0]
+    assert any("Capturing logcat" in line for line in out_lines)
+    assert any("Capturing activity stack" in line for line in out_lines)
+    assert any("Dynamic analysis complete for serial123" in line for line in out_lines)
     assert (tmp_path / "logcat.txt").read_text() == "log output"
     assert (tmp_path / "activity.txt").read_text() == "activity output"
     assert paths["logcat"] == tmp_path / "logcat.txt"
