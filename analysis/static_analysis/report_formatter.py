@@ -1,7 +1,9 @@
 """Formatting helpers for static analysis reports."""
 
 from collections import Counter
-from typing import Iterable, Optional
+from typing import Iterable, Optional, Mapping, Any
+
+from utils.csv_utils import write_csv, read_apk_list, validate_apk_list
 
 from .package_analysis import PackageReport
 import utils.logging_utils.logging_engine as log
@@ -68,3 +70,48 @@ def print_reports(
 
     print()
     log.info(f"Static analysis complete for {serial}")
+
+
+def write_csv_report(
+    reports: Iterable[PackageReport | Mapping[str, Any]], path: str
+) -> None:
+    """Write ``reports`` to ``path`` using :func:`utils.csv_utils.write_csv`.
+
+    ``reports`` may contain :class:`PackageReport` instances or mapping-like
+    objects with matching keys.
+    """
+
+    rows = []
+    for rep in reports:
+        if isinstance(rep, Mapping):
+            pkg = rep.get("Package") or rep.get("package") or rep.get("name")
+            apk = rep.get("APK_Path") or rep.get("apk_path")
+            category = rep.get("Category") or rep.get("category")
+            risk = rep.get("Risk_Score") or rep.get("risk_score")
+        else:
+            pkg = rep.name
+            apk = rep.apk_path
+            category = rep.category
+            risk = rep.risk_score
+        rows.append(
+            {
+                "Package": pkg,
+                "APK_Path": apk or "",
+                "Category": category,
+                "Risk_Score": risk,
+            }
+        )
+
+    print(
+        f"[report_formatter] Writing {len(rows)} report row(s) to {path}"
+    )
+    write_csv(path, rows, headers=["Category", "Risk_Score"])
+
+    # Debugging verification to ensure the file was written correctly
+    if validate_apk_list(path):
+        loaded = read_apk_list(path)
+        print(
+            f"[report_formatter] Verified CSV at {path} with {len(loaded)} row(s)"
+        )
+    else:
+        print(f"[report_formatter] Warning: failed to validate written CSV at {path}")
