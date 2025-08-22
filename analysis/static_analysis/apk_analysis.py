@@ -1,7 +1,7 @@
 import shutil
 from typing import Dict, Optional
-import utils.logging_utils.logging_engine as log
 import subprocess
+import utils.logging_utils.logging_engine as log
 
 def _run_local_command(cmd: list[str]) -> Optional[str]:
     try:
@@ -15,16 +15,24 @@ def _run_local_command(cmd: list[str]) -> Optional[str]:
         return None
 
 def analyze_apk(apk_path: str) -> Dict[str, str]:
+    """Run aapt2 against ``apk_path`` and parse basic metadata."""
+
+    print(f"Analyzing APK: {apk_path}")
     log.info(f"Static analysis requested for APK: {apk_path}")
 
+    print("Checking for aapt2...")
     if not shutil.which("aapt2"):
         log.error("aapt2 not found. Install it via scripts/install-aapt2.sh")
         print("⚠️  aapt2 not found. Run scripts/install-aapt2.sh to enable APK analysis.")
         return {}
 
+    print("Running aapt2 badging dump")
     output = _run_local_command(["aapt2", "dump", "badging", apk_path])
     if not output:
+        print("⚠️  Failed to retrieve badging info")
         return {}
+
+    print("Parsing badging output")
 
     metadata: Dict[str, str] = {}
     permissions: list[str] = []
@@ -42,6 +50,8 @@ def analyze_apk(apk_path: str) -> Dict[str, str]:
 
     if permissions:
         metadata["permissions"] = ", ".join(permissions)
+        print(f"Found {len(permissions)} permission(s)")
 
+    print("APK metadata extraction complete")
     return metadata
 

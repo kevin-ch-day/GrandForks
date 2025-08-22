@@ -43,14 +43,13 @@ SECRET_KEYWORDS = ["api_key", "apikey", "api-key", "secret", "token"]
 
 def _pull_apk(serial: str, package: str) -> str | None:
     """Retrieve ``package`` APK from ``serial`` to a temporary path."""
-
-    path_res = run_adb_command(
-        serial, ["shell", "pm", "path", package], log_errors=False
-    )
+    print(f"  Locating APK for {package}...")
+    path_res = run_adb_command(serial, ["shell", "pm", "path", package], log_errors=False)
     if not path_res.get("success"):
         reason = path_res.get("error", "unknown error")
         _record_failure(package, "path", reason)
         log.debug(f"Failed to locate APK for {package} on {serial}: {reason}")
+        print(f"  Failed to locate APK: {reason}")
         return None
 
     output = path_res.get("output")
@@ -67,15 +66,15 @@ def _pull_apk(serial: str, package: str) -> str | None:
     if not paths:
         _record_failure(package, "path", output)
         log.debug(f"No valid pm path entries for {package}: {output}")
+        print("  No valid path entries returned")
         return None
 
     remote_path = next((p for p in paths if p.endswith("base.apk")), paths[0])
+    print(f"  Pulling {remote_path}")
 
     tmp_dir = tempfile.mkdtemp(prefix="apk_")
     local_path = os.path.join(tmp_dir, f"{package}.apk")
-    pull_res = run_adb_command(
-        serial, ["pull", remote_path, local_path], timeout=60, log_errors=False
-    )
+    pull_res = run_adb_command(serial, ["pull", remote_path, local_path], timeout=60, log_errors=False)
     if not pull_res.get("success"):
         error = pull_res.get("error", "unknown error").lower()
         if "denied" in error:
@@ -86,22 +85,27 @@ def _pull_apk(serial: str, package: str) -> str | None:
             reason = "other"
         _record_failure(package, reason, error)
         log.debug(f"Failed to pull APK for {package}: {error}")
+        print(f"  Failed to pull APK: {error}")
         shutil.rmtree(tmp_dir, ignore_errors=True)
         return None
+
+    print(f"  APK saved to {local_path}")
     return local_path
 
 
 def _run_strings(path: str) -> str | None:
     """Run the ``strings`` utility on ``path`` and return its output."""
-
+    print(f"  Running strings on {path}")
     if not shutil.which("strings"):
         log.warning("strings command not available")
+        print("  strings command not available")
         return None
     try:
         res = subprocess.run(["strings", "-a", path], capture_output=True, text=True, check=True)
         return res.stdout
     except (subprocess.CalledProcessError, OSError) as exc:
         log.warning(f"strings failed for {path}: {exc}")
+        print(f"  strings failed: {exc}")
         return None
 
 

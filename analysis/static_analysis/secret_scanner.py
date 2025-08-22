@@ -30,24 +30,16 @@ PATTERNS: Mapping[str, re.Pattern[str]] = {
 
 
 def scan(text: str) -> Dict[str, List[str]]:
-    """Return all pattern matches found within ``text``.
+    """Return all pattern matches found within ``text`` while reporting progress."""
 
-    Parameters
-    ----------
-    text: str
-        Input string to search.
-
-    Returns
-    -------
-    Dict[str, List[str]]
-        Mapping from pattern name to list of matched strings. Patterns with no
-        matches are omitted from the result.
-    """
+    print("Scanning text for secret patterns")
     results: Dict[str, List[str]] = {}
     for name, pattern in PATTERNS.items():
         hits = pattern.findall(text)
+        print(f"  {name}: {len(hits)} hit(s)")
         if hits:
             results[name] = hits
+    print("Secret scan complete")
     return results
 
 __all__ = ["scan", "PATTERNS"]
