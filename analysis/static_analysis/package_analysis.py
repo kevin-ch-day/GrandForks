@@ -3,6 +3,7 @@
 from dataclasses import dataclass
 from typing import Dict, Iterable, List, Optional, Tuple
 import logging
+from pathlib import Path
 
 import utils.logging_utils.logging_engine as log
 from utils.adb_utils.adb_runner import run_adb_command
@@ -58,8 +59,13 @@ class PackageReport:
     artifacts: Optional[List[str]] = None
 
 
-def get_all_package_permissions(serial: str) -> Dict[str, List[str]]:
-    """Return a mapping of package names to permission lists."""
+def get_all_package_permissions(serial: str, raw_dir: Path | None = None) -> Dict[str, List[str]]:
+    """Return a mapping of package names to permission lists.
+
+    If ``raw_dir`` is provided, the raw ``dumpsys package`` output is written to
+    ``raw_dir / 'dumpsys_package.txt'`` for later inspection.
+    """
+
     log.debug(f"Fetching full package dump for {serial}")
     result = run_adb_command(serial, ["shell", "dumpsys", "package"])
 
@@ -70,6 +76,12 @@ def get_all_package_permissions(serial: str) -> Dict[str, List[str]]:
         return {}
 
     output: Optional[str] = result.get("output")
+    if raw_dir is not None:
+        try:
+            (raw_dir / "dumpsys_package.txt").write_text(str(output or ""))
+        except OSError:
+            pass
+
     if not isinstance(output, str) or not output.strip():
         log.warning(f"No package data found for {serial}")
         return {}
@@ -99,8 +111,13 @@ def get_all_package_permissions(serial: str) -> Dict[str, List[str]]:
     return packages
 
 
-def get_installed_apk_paths(serial: str) -> Dict[str, str]:
-    """Return a mapping of package names to APK paths on the device."""
+def get_installed_apk_paths(serial: str, raw_dir: Path | None = None) -> Dict[str, str]:
+    """Return a mapping of package names to APK paths on the device.
+
+    If ``raw_dir`` is provided, the raw ``pm list packages`` output is written
+    to ``raw_dir / 'pm_list_packages.txt'``.
+    """
+
     log.debug(f"Listing APK paths for {serial}")
     result = run_adb_command(
         serial, ["shell", "pm", "list", "packages", "-f", "-u", "--user", "0"]
@@ -113,6 +130,12 @@ def get_installed_apk_paths(serial: str) -> Dict[str, str]:
         return {}
 
     output: Optional[str] = result.get("output")
+    if raw_dir is not None:
+        try:
+            (raw_dir / "pm_list_packages.txt").write_text(str(output or ""))
+        except OSError:
+            pass
+
     if not isinstance(output, str) or not output.strip():
         log.warning(f"No APK paths found for {serial}")
         return {}
@@ -202,14 +225,19 @@ def compute_apk_hashes(
     return hashes
 
 
-def analyze_packages(serial: str) -> List[PackageReport]:
-    """Gather package, permission, and risk information for ``serial``."""
+def analyze_packages(serial: str, raw_dir: Path | None = None) -> List[PackageReport]:
+    """Gather package, permission, and risk information for ``serial``.
+
+    ``raw_dir`` is an optional directory where raw adb command output will be
+    stored.
+    """
+
     print("- Retrieving package permissions...")
-    perms_map = get_all_package_permissions(serial)
+    perms_map = get_all_package_permissions(serial, raw_dir=raw_dir)
     print(f"  Found {len(perms_map)} package(s)")
 
     print("- Listing installed APK paths...")
-    apk_paths = get_installed_apk_paths(serial)
+    apk_paths = get_installed_apk_paths(serial, raw_dir=raw_dir)
     print(f"  Located paths for {len(apk_paths)} package(s)")
 
     print("- Verifying APK availability...")

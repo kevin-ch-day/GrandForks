@@ -6,6 +6,7 @@ from typing import Iterable, Optional, Mapping, Any
 from utils.csv_utils import write_csv, read_apk_list, validate_apk_list
 
 from .package_analysis import PackageReport
+from .social_app_finder import SocialApp
 import utils.logging_utils.logging_engine as log
 
 
@@ -115,3 +116,21 @@ def write_csv_report(
         )
     else:
         print(f"[report_formatter] Warning: failed to validate written CSV at {path}")
+
+
+def write_social_csv(apps: Iterable[SocialApp], path: str) -> None:
+    """Write detected social apps to ``path`` as a CSV."""
+
+    rows = []
+    for app in apps:
+        rows.append(
+            {
+                "Package": app.package,
+                "APK_Path": ";".join(app.apk_paths),
+                "App_Name": app.app_name,
+                "Label": app.label or "",
+            }
+        )
+
+    print(f"[report_formatter] Writing {len(rows)} social app row(s) to {path}")
+    write_csv(path, rows, headers=["App_Name", "Label"])

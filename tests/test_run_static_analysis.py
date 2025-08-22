@@ -9,27 +9,106 @@ from analysis.static_analysis import run_static_analysis
 from analysis.static_analysis.social_app_finder import SocialApp
 
 
-def test_analyze_device_shows_progress(monkeypatch, capsys):
+def test_analyze_device_creates_output(monkeypatch, tmp_path, capsys):
+    def fake_analyze_packages(serial, raw_dir=None):
+        # Simulate writing raw outputs
+        if raw_dir is not None:
+            (raw_dir / 'dumpsys_package.txt').write_text('dump')
+            (raw_dir / 'pm_list_packages.txt').write_text('pm')
+        return [{'name': 'pkg', 'apk_path': '/a/b.apk', 'category': 'cat', 'risk_score': 0}]
+
+    def fake_find_social(serial, raw_dir=None):
+        if raw_dir is not None:
+            (raw_dir / 'third_party_packages.txt').write_text('third')
+        return [SocialApp('pkg', 'App', [], None, {})]
+
+    def fake_run_adb_command(serial, args, timeout=60, log_errors=False):
+        if args[0] == 'pull':
+            Path(args[2]).write_text('apk')
+        return {'success': True}
+
     monkeypatch.setattr(
         run_static_analysis.package_analysis,
         'analyze_packages',
-        lambda serial: [{'package': 'com.example'}],
+        fake_analyze_packages,
     )
-
-    def fake_print_reports(reports, serial, limit):
-        pass
-
+    monkeypatch.setattr(
+        run_static_analysis.social_app_finder,
+        'find_social_apps',
+        fake_find_social,
+    )
     monkeypatch.setattr(
         run_static_analysis.report_formatter,
         'print_reports',
-        fake_print_reports,
+        lambda reports, serial, limit: None,
     )
+    monkeypatch.setattr(run_static_analysis, 'run_adb_command', fake_run_adb_command)
+    monkeypatch.chdir(tmp_path)
 
     run_static_analysis.analyze_device('SER123', artifact_limit=1)
     out = capsys.readouterr().out
     assert 'Starting static analysis for device SER123' in out
-    assert 'Gathering packages from device' in out
-    assert 'Analyzing 1 package' in out
+    assert 'Run Dashboard' in out
+    assert 'Social apps discovered' in out
+
+    root = tmp_path / 'output' / 'SER123'
+    runs = [p for p in root.iterdir() if p.is_dir() and p.name != 'latest']
+    assert len(runs) == 1
+    run_path = runs[0]
+    assert (run_path / 'reports' / 'packages.csv').exists()
+    assert (run_path / 'reports' / 'social_apps.csv').exists()
+    assert (run_path / 'raw' / 'dumpsys_package.txt').exists()
+    assert (run_path / 'raw' / 'pm_list_packages.txt').exists()
+    assert (run_path / 'raw' / 'third_party_packages.txt').exists()
+    assert (run_path / 'apks' / 'pkg.apk').exists()
+    latest = root / 'latest'
+    assert latest.is_symlink()
+    assert latest.resolve() == run_path.resolve()
+
+
+def test_analyze_device_skip_apk_pull(monkeypatch, tmp_path, capsys):
+    def fake_analyze_packages(serial, raw_dir=None):
+        if raw_dir is not None:
+            (raw_dir / 'dumpsys_package.txt').write_text('dump')
+        return [{'name': 'pkg', 'apk_path': '/a/b.apk', 'category': 'cat', 'risk_score': 0}]
+
+    def fake_find_social(serial, raw_dir=None):
+        return []
+
+    called = {'pull': False}
+
+    def fake_run_adb_command(serial, args, timeout=60, log_errors=False):
+        if args[0] == 'pull':
+            called['pull'] = True
+        return {'success': True}
+
+    monkeypatch.setattr(
+        run_static_analysis.package_analysis,
+        'analyze_packages',
+        fake_analyze_packages,
+    )
+    monkeypatch.setattr(
+        run_static_analysis.social_app_finder,
+        'find_social_apps',
+        fake_find_social,
+    )
+    monkeypatch.setattr(
+        run_static_analysis.report_formatter,
+        'print_reports',
+        lambda reports, serial, limit: None,
+    )
+    monkeypatch.setattr(run_static_analysis, 'run_adb_command', fake_run_adb_command)
+    monkeypatch.chdir(tmp_path)
+
+    run_static_analysis.analyze_device('SER', pull_apk_files=False)
+    out = capsys.readouterr().out
+    assert 'Pulling APKs' not in out
+
+    root = tmp_path / 'output' / 'SER'
+    runs = [p for p in root.iterdir() if p.is_dir() and p.name != 'latest']
+    run_path = runs[0]
+    assert not (run_path / 'apks').exists()
+    assert called['pull'] is False
 
 
 def test_analyze_apk_driver_shows_metadata(monkeypatch, capsys):

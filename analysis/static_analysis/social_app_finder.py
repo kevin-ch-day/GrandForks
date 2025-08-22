@@ -29,20 +29,29 @@ class SocialApp:
 
 
 def find_social_apps(serial: str, apk_csv: str | Path = "apk_list.csv") -> List[SocialApp]:
-    """Identify installed social apps on the device identified by ``serial``."""
+    """Identify installed social apps on the device identified by ``serial``.
+
+    Attempts to load package data from discovery CSV first, then falls back to
+    ADB enumeration if necessary.
+    """
 
     print(f"\n🔎 Searching for social apps on {serial}")
     packages, source = discovery.list_packages(serial, apk_csv)
     source_msg = f"{source} (CSV missing)" if source == "adb" else source
     print(f"  Loaded {len(packages)} package(s) from {source_msg}")
+
     found: List[SocialApp] = []
     unresolved: List[str] = []
     partitions = ["/data/app", "/system/app", "/vendor/app", "/product/app"]
+
     for pkg, apk_path in packages.items():
         if pkg not in SOCIAL_APPS:
             continue
+
         print(f"  Inspecting {pkg}")
         apk_paths: List[str] = [apk_path] if apk_path else []
+
+        # If no path from discovery, query adb directly
         if not apk_paths:
             print(f"    Package {pkg} missing path; checking adb...")
             res = run_adb_command(serial, ["pm", "path", pkg], log_errors=False)
@@ -52,19 +61,23 @@ def find_social_apps(serial: str, apk_csv: str | Path = "apk_list.csv") -> List[
                     adb_path = line.split(":", 1)[1]
                     apk_paths.append(adb_path)
                     print(f"    pm path found {adb_path}")
-            if not apk_paths:
-                print("    pm path failed; searching common partitions...")
-                for part in partitions:
-                    ls_res = run_adb_command(serial, ["ls", part], log_errors=False)
-                    if ls_res.get("success") and pkg in ls_res.get("output", ""):
-                        found_path = f"{part}/{pkg}"
-                        apk_paths.append(found_path)
-                        print(f"    found in {found_path}")
-                        break
-                    else:
-                        print(f"    not found in {part}")
+
+        # If still missing, search common partitions
+        if not apk_paths:
+            print("    pm path failed; searching common partitions...")
+            for part in partitions:
+                ls_res = run_adb_command(serial, ["ls", part], log_errors=False)
+                if ls_res.get("success") and pkg in ls_res.get("output", ""):
+                    found_path = f"{part}/{pkg}"
+                    apk_paths.append(found_path)
+                    print(f"    found in {found_path}")
+                    break
+                else:
+                    print(f"    not found in {part}")
+
         if not apk_paths:
             unresolved.append(pkg)
+
         found.append(
             SocialApp(
                 package=pkg,
@@ -75,6 +88,7 @@ def find_social_apps(serial: str, apk_csv: str | Path = "apk_list.csv") -> List[
             )
         )
 
+    # Summary
     if found:
         print(f"Identified {len(found)} social app(s)")
     else:
@@ -84,4 +98,5 @@ def find_social_apps(serial: str, apk_csv: str | Path = "apk_list.csv") -> List[
         print("Unresolved packages:")
         for pkg in unresolved:
             print(f"  {pkg}: searched {paths}")
+
     return found
