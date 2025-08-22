@@ -28,6 +28,10 @@ def analyze_device(serial: str, artifact_limit: int | None = None) -> None:
 
     print(f"Analyzing {len(reports)} package(s)")
     report_formatter.print_reports(reports, serial, artifact_limit)
+    # Persist a machine-readable listing for downstream tooling
+    print("[run_static_analysis] Writing apk_list.csv for debug")
+    report_formatter.write_csv_report(reports, "apk_list.csv")
+    print("[run_static_analysis] apk_list.csv write complete")
     print(f"✅ Static analysis complete for {serial}")
     log.info(f"Static analysis complete for {serial}")
 
