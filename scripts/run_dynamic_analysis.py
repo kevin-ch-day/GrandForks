@@ -11,7 +11,7 @@ from utils.adb_utils.adb_devices import get_connected_devices
 
 
 def _resolve_serial(provided: str | None) -> str | None:
-    """Return a serial either from argument or user selection."""
+    """Return a serial either from argument or automatic selection."""
 
     if provided:
         print(f"Using provided serial: {provided}")
@@ -21,32 +21,21 @@ def _resolve_serial(provided: str | None) -> str | None:
     if not devices:
         return None
 
-    if len(devices) == 1:
-        print(f"Using connected device: {devices[0].serial}")
-        return devices[0].serial
-
-    print("Multiple devices detected:")
-    for idx, dev in enumerate(devices, start=1):
-        model = getattr(dev, "model", "unknown") or "unknown"
-        print(f" {idx}. {dev.serial} ({model})")
-
-    choice = input("Select device number: ").strip()
-    try:
-        selected = devices[int(choice) - 1]
-        print(f"Selected device: {selected.serial}")
-        return selected.serial
-    except (ValueError, IndexError):
-        print("Invalid selection")
+    if len(devices) > 1:
+        print("Multiple devices detected. Specify one with --device.")
         return None
+
+    print(f"Using connected device: {devices[0].serial}")
+    return devices[0].serial
 
 
 def main(argv: list[str] | None = None) -> int:
     """Entry point for the dynamic analysis helper."""
     parser = argparse.ArgumentParser(description="Run basic dynamic analysis on a device")
     parser.add_argument(
-        "serial",
-        nargs="?",
-        help="Target device serial; defaults to first connected device",
+        "--device",
+        dest="serial",
+        help="Target device serial; required if multiple devices are connected",
     )
     parser.add_argument(
         "-o",

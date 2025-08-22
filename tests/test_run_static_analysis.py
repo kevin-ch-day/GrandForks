@@ -95,6 +95,14 @@ def test_resolve_serial_rejects_unknown(monkeypatch, capsys):
     assert 'not connected' in out
 
 
+def test_resolve_serial_multiple(monkeypatch, capsys):
+    monkeypatch.setattr(run_static_analysis, 'get_connected_devices', lambda: [Dummy('A'), Dummy('B')])
+    serial = run_static_analysis._resolve_serial(None)
+    assert serial is None
+    out = capsys.readouterr().out
+    assert 'Multiple devices detected' in out
+
+
 def test_scan_package_strings_reports_artifacts(monkeypatch, capsys):
     monkeypatch.setattr(run_static_analysis.string_finder, 'find_artifacts', lambda s, p: ['hit'])
     monkeypatch.setattr(run_static_analysis.string_finder, 'print_failure_summary', lambda: None)

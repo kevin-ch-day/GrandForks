@@ -1,45 +1,13 @@
 # main.py
-import sys
 import signal
 import argparse
 import logging
 
 from config import app_config
-from utils.display_utils import menu_utils, error_utils, theme
+from utils.display_utils import theme
 import utils.logging_utils.logging_engine as log
-from device import show_devices, connect_to_device
-from utils.about_app import about_app
-from database.db_menu import db_menu
 
-
-# ---------- Menu Actions ----------
-
-def action_show_connected_devices():
-    """Action: List all connected Android devices."""
-    log.info("Selected: Show Connected Devices")
-    try:
-        show_devices.display_detailed_devices()
-    except KeyboardInterrupt:
-        print("\n⚠️  Device listing interrupted.\n")
-        log.warning("Device listing interrupted by user")
-
-
-def action_connect_to_device():
-    """Action: Connect to a selected device and open interactive menu."""
-    log.info("Selected: Connect to a Device")
-    try:
-        connect_to_device.connect_to_device()
-    except KeyboardInterrupt:
-        print("\n⚠️  Device connection interrupted. Returning to main menu.\n")
-        log.warning("Device connection interrupted by user")
-    except Exception as e:
-        error_utils.show_error(f"Failed to connect to device: {e}")
-
-
-def action_database_menu():
-    """Action: Open interactive database menu."""
-    log.info("Opened Database Menu")
-    db_menu()
+from main_menu import MainMenu
 
 
 # ---------- Signal Handling ----------
@@ -114,20 +82,8 @@ def main():
     # Trap Ctrl+C
     signal.signal(signal.SIGINT, handle_interrupt)
 
-    # Define main menu
-    options = {
-        "1": ("Show Connected Devices", action_show_connected_devices),
-        "2": ("Connect to a Device", action_connect_to_device),
-        "3": ("Database", action_database_menu),
-        "4": ("About App", about_app),
-    }
-
     try:
-        menu_utils.show_menu(
-            title=f"{app_config.APP_NAME} v{app_config.APP_VERSION}",
-            options=options,
-            exit_label="Exit",
-        )
+        MainMenu().show()
     except KeyboardInterrupt:
         print("\n⚠️  Main menu interrupted. Exiting.\n")
         log.warning("Main menu interrupted by user")
